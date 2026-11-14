@@ -26,8 +26,11 @@ jobs:
           gradle-version: '8.9'
 
       - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MYAI_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.MYAI_KEYSTORE_BASE64 }}" | base64 --decode > myai-release.jks
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > myai-release.jks
+          test -s myai-release.jks
 
       - name: Build Signed Release APK
         run: gradle assembleRelease
