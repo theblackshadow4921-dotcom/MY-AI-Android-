@@ -1,4 +1,3 @@
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -16,6 +15,15 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("myai-release.jks")
+            storePassword = System.getenv("MYAI_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("MYAI_KEY_ALIAS")
+            keyPassword = System.getenv("MYAI_KEY_PASSWORD")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -24,11 +32,12 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             isDebuggable = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
-

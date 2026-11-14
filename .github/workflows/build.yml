@@ -25,11 +25,19 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build APK
-        run: gradle assembleDebug
+      - name: Decode signing keystore
+        run: |
+          echo "${{ secrets.MYAI_KEYSTORE_BASE64 }}" | base64 --decode > myai-release.jks
 
-      - name: Upload APK
+      - name: Build Signed Release APK
+        run: gradle assembleRelease
+        env:
+          MYAI_KEYSTORE_PASSWORD: ${{ secrets.MYAI_KEYSTORE_PASSWORD }}
+          MYAI_KEY_ALIAS: ${{ secrets.MYAI_KEY_ALIAS }}
+          MYAI_KEY_PASSWORD: ${{ secrets.MYAI_KEY_PASSWORD }}
+
+      - name: Upload Signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: MY-AI-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: MY-AI-SIGNED-APK
+          path: app/build/outputs/apk/release/app-release.apk
