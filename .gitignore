@@ -1,0 +1,8 @@
+
+# Termux and local build files
+.gradle/
+build/
+app/build/
+build-error.txt
+error.txt
+MainActivity.backup.kt

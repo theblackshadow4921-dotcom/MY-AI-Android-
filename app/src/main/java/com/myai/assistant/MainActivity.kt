@@ -16,6 +16,10 @@ import android.view.ViewGroup
 import android.widget.*
 import android.net.Uri
 import java.util.Locale
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
 
@@ -98,8 +102,8 @@ class MainActivity : Activity() {
                 val message = input.text.toString().trim()
                 if (message.isNotEmpty()) {
                     addMessage("आप: $message")
-                    addMessage("MY AI: आपका संदेश प्राप्त हुआ। Gemini कनेक्शन अगले चरण में जोड़ेंगे।")
                     input.text.clear()
+                    askGemini(message)
                 }
             }
         }
@@ -128,6 +132,57 @@ class MainActivity : Activity() {
         setContentView(root)
 
         addMessage("नमस्ते! MY AI में आपका स्वागत है।")
+    }
+
+
+    private fun askGemini(question: String) {
+        addMessage("MY AI: जवाब तैयार हो रहा है...")
+
+        thread {
+            var connection: HttpURLConnection? = null
+
+            val reply = try {
+                connection = URL("http://127.0.0.1:5000/chat")
+                    .openConnection() as HttpURLConnection
+
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.connectTimeout = 15000
+                connection.readTimeout = 120000
+                connection.setRequestProperty(
+                    "Content-Type", "application/json"
+                )
+
+                val body = JSONObject()
+                    .put("message", question).toString()
+
+                connection.outputStream.use {
+                    it.write(body.toByteArray(Charsets.UTF_8))
+                }
+
+                val stream = if (connection.responseCode in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+
+                val response = stream.bufferedReader().use {
+                    it.readText()
+                }
+
+                JSONObject(response).optString(
+                    "reply", "Gemini से जवाब नहीं मिला।"
+                )
+            } catch (e: Exception) {
+                "कनेक्शन में समस्या: ${e.message}"
+            } finally {
+                connection?.disconnect()
+            }
+
+            runOnUiThread {
+                addMessage("MY AI: $reply")
+            }
+        }
     }
 
     private fun addFeatureButton(
