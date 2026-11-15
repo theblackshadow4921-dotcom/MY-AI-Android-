@@ -1,4 +1,3 @@
-
 name: Build MY AI Debug APK
 
 on:
@@ -33,5 +32,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MY-AI-DEBUG-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
-          
+          path: app/build/outputs/apk/debug/app-debug
