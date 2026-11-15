@@ -1,4 +1,5 @@
-name: Build MY AI APK
+
+name: Build MY AI Debug APK
 
 on:
   workflow_dispatch:
@@ -25,22 +26,12 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Decode signing keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.MYAI_KEYSTORE_BASE64 }}
-        run: |
-          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > myai-release.jks
-          test -s myai-release.jks
+      - name: Build Debug APK
+        run: gradle assembleDebug
 
-      - name: Build Signed Release APK
-        run: gradle assembleRelease
-        env:
-          MYAI_KEYSTORE_PASSWORD: ${{ secrets.MYAI_KEYSTORE_PASSWORD }}
-          MYAI_KEY_ALIAS: ${{ secrets.MYAI_KEY_ALIAS }}
-          MYAI_KEY_PASSWORD: ${{ secrets.MYAI_KEY_PASSWORD }}
-
-      - name: Upload Signed APK
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: MY-AI-SIGNED-APK
-          path: app/build/outputs/apk/release/app-release.apk
+          name: MY-AI-DEBUG-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          
