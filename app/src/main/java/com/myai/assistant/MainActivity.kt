@@ -1,5 +1,8 @@
 package com.myai.assistant
 
+import java.io.ByteArrayOutputStream
+import android.util.Base64
+
 import android.Manifest
 import android.app.Activity
 import android.os.Bundle
@@ -189,6 +192,74 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun analyzeImage(photo: Bitmap) {
+        addMessage("MY AI: फोटो का विश्लेषण कर रहा हूँ...")
+
+        thread {
+            var connection: HttpURLConnection? = null
+
+            val reply = try {
+                val output = ByteArrayOutputStream()
+                photo.compress(Bitmap.CompressFormat.JPEG, 65, output)
+
+                val encodedImage = Base64.encodeToString(
+                    output.toByteArray(),
+                    Base64.NO_WRAP
+                )
+
+                connection = URL(
+                    "https://my-ai-gemini.onrender.com/analyze-image"
+                ).openConnection() as HttpURLConnection
+
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.connectTimeout = 20000
+                connection.readTimeout = 120000
+                connection.setRequestProperty(
+                    "Content-Type", "application/json"
+                )
+
+                val body = JSONObject()
+                    .put("message", "इस फोटो में क्या दिखाई दे रहा है? हिंदी में विस्तार से बताओ।")
+                    .put("image", encodedImage)
+                    .put("mime_type", "image/jpeg")
+                    .toString()
+
+                connection.outputStream.use {
+                    it.write(body.toByteArray(Charsets.UTF_8))
+                }
+
+                val stream = if (connection.responseCode in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+
+                val response = stream.bufferedReader().use {
+                    it.readText()
+                }
+
+                JSONObject(response).optString(
+                    "reply", "फोटो का जवाब नहीं मिला।"
+                )
+            } catch (e: Exception) {
+                "फोटो भेजने में समस्या: ${e.message}"
+            } finally {
+                connection?.disconnect()
+            }
+
+            runOnUiThread {
+                addMessage("MY AI: $reply")
+                tts?.speak(
+                    reply,
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "MY_AI_IMAGE_REPLY"
+                )
+            }
+        }
+    }
+
     private fun addFeatureButton(
         parent: LinearLayout,
         icon: String,
@@ -219,6 +290,20 @@ class MainActivity : Activity() {
     }
 
     private fun openCamera() {
+        if (checkSelfPermission(Manifest.permission.CAMERA)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.CAMERA),
+                CAMERA_CODE
+            )
+            return
+        }
+
+        launchCamera()
+    }
+
+    private fun launchCamera() {
         try {
             val intent = Intent("android.media.action.IMAGE_CAPTURE")
             startActivityForResult(intent, CAMERA_CODE)
@@ -344,6 +429,7 @@ class MainActivity : Activity() {
                     }
                     chatLayout.addView(image)
                     addMessage("फोटो प्राप्त हुई।")
+                    analyzeImage(photo)
                 } else {
                     addMessage("फोटो प्राप्त नहीं हुई।")
                 }
@@ -399,6 +485,12 @@ class MainActivity : Activity() {
                 openVoice()
             } else {
                 addMessage("Microphone permission अस्वीकार कर दी गई।")
+            }
+        } else if (requestCode == CAMERA_CODE) {
+            if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
+                launchCamera()
+            } else {
+                addMessage("Camera permission अस्वीकार कर दी गई।")
             }
         }
     }
