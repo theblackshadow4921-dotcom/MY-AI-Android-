@@ -33,6 +33,7 @@ class MainActivity : Activity() {
         const val VOICE_CODE = 102
         const val CONTACT_CODE = 103
         const val LOCATION_CODE = 104
+        const val MIC_PERMISSION_CODE = 105
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -183,6 +184,7 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 addMessage("MY AI: $reply")
+                tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "MY_AI_REPLY")
             }
         }
     }
@@ -226,6 +228,16 @@ class MainActivity : Activity() {
     }
 
     private fun openVoice() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                MIC_PERMISSION_CODE
+            )
+            return
+        }
+
         try {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             intent.putExtra(
@@ -345,6 +357,7 @@ class MainActivity : Activity() {
                 if (!spoken.isNullOrBlank()) {
                     input.setText(spoken)
                     addMessage("आपने कहा: $spoken")
+                    askGemini(spoken)
                 }
             }
 
@@ -380,6 +393,12 @@ class MainActivity : Activity() {
                 getLocation()
             } else {
                 addMessage("Location permission अस्वीकार कर दी गई।")
+            }
+        } else if (requestCode == MIC_PERMISSION_CODE) {
+            if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
+                openVoice()
+            } else {
+                addMessage("Microphone permission अस्वीकार कर दी गई।")
             }
         }
     }
