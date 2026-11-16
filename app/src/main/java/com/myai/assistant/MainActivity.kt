@@ -144,7 +144,7 @@ class MainActivity : Activity() {
             var connection: HttpURLConnection? = null
 
             val reply = try {
-                connection = URL("http://127.0.0.1:5000/chat")
+                connection = URL("https://my-ai-gemini.onrender.com/chat")
                     .openConnection() as HttpURLConnection
 
                 connection.requestMethod = "POST"
