@@ -6,3 +6,30 @@ app/build/
 build-error.txt
 error.txt
 MainActivity.backup.kt
+
+# Local APKs and generated files
+IMAGE-APK/
+MY-AI-DEBUG-APK/
+RENDER-APK/
+VOICE-APK/
+correct-apk/
+downloaded-apk/
+new-apk/
+__pycache__/
+*.pyc
+
+# Local backups
+*.backup
+*.backup-*
+MainActivity.before_icons.kt
+MainActivity.voice-backup.kt
+
+# Local secrets, models and Sherpa download files
+local.properties
+*.jks
+*.keystore
+models/
+sherpa-onnx-v1.13.8.aar
+sherpa-classes.jar
+MainActivity.wake-backup.kt
+WakeWordService.empty-backup.kt

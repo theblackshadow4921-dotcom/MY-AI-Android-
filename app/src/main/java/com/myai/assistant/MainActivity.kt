@@ -7,6 +7,10 @@ import android.Manifest
 import android.app.Activity
 import android.os.Bundle
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.os.Build
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Bitmap
@@ -26,6 +30,15 @@ import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
 
+    private val wakeWordReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == WakeWordService.ACTION_WAKE_WORD_DETECTED) {
+                addMessage("हाँ, मैं सुन रहा हूँ। बोलिए...")
+                openVoice()
+            }
+        }
+    }
+
     private lateinit var chatLayout: LinearLayout
     private lateinit var input: EditText
     private var tts: TextToSpeech? = null
@@ -36,11 +49,19 @@ class MainActivity : Activity() {
         const val VOICE_CODE = 102
         const val CONTACT_CODE = 103
         const val LOCATION_CODE = 104
+        const val WAKE_PERMISSION_CODE = 106
         const val MIC_PERMISSION_CODE = 105
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val wakeFilter = IntentFilter(WakeWordService.ACTION_WAKE_WORD_DETECTED)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(wakeWordReceiver, wakeFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(wakeWordReceiver, wakeFilter)
+        }
 
         tts = TextToSpeech(this) {
             if (it == TextToSpeech.SUCCESS) {
@@ -138,8 +159,34 @@ class MainActivity : Activity() {
         setContentView(root)
 
         addMessage("नमस्ते! MY AI में आपका स्वागत है।")
+        startWakeWordIfPermitted()
+
     }
 
+
+    private fun startWakeWordIfPermitted() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                WAKE_PERMISSION_CODE
+            )
+            return
+        }
+
+        try {
+            val serviceIntent = Intent(this, WakeWordService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            addMessage("JARVIS सक्रिय हो रहा है। HEY JARVIS बोलें।")
+        } catch (e: Exception) {
+            addMessage("Wake Word Service शुरू नहीं हो सकी: ${e.message}")
+        }
+    }
 
     private fun askGemini(question: String) {
         addMessage("MY AI: जवाब तैयार हो रहा है...")
@@ -480,6 +527,14 @@ class MainActivity : Activity() {
             } else {
                 addMessage("Location permission अस्वीकार कर दी गई।")
             }
+        } else if (requestCode == WAKE_PERMISSION_CODE) {
+            if (grantResults.isNotEmpty() &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED
+            ) {
+                startWakeWordIfPermitted()
+            } else {
+                addMessage("JARVIS के लिए Microphone permission जरूरी है।")
+            }
         } else if (requestCode == MIC_PERMISSION_CODE) {
             if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
                 openVoice()
@@ -506,6 +561,11 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        try {
+            unregisterReceiver(wakeWordReceiver)
+        } catch (_: Exception) {
+        }
+
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
