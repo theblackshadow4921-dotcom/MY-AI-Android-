@@ -66,26 +66,27 @@ class MainActivity : Activity() {
         scroll.addView(chatLayout)
 
         val features = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
         }
 
-        addFeatureButton(features, "📷 Camera") {
+        addFeatureButton(features, "📷", "Camera") {
             openCamera()
         }
 
-        addFeatureButton(features, "🎤 Voice Assistant") {
+        addFeatureButton(features, "🎤", "Voice Assistant") {
             openVoice()
         }
 
-        addFeatureButton(features, "📍 My Location") {
+        addFeatureButton(features, "📍", "My Location") {
             getLocation()
         }
 
-        addFeatureButton(features, "👤 Select Contact") {
+        addFeatureButton(features, "👤", "Select Contact") {
             openContacts()
         }
 
-        addFeatureButton(features, "💬 Send SMS") {
+        addFeatureButton(features, "💬", "Send SMS") {
             sendSMS()
         }
 
@@ -109,7 +110,6 @@ class MainActivity : Activity() {
         }
 
         root.addView(title)
-        root.addView(features)
 
         root.addView(
             scroll,
@@ -117,6 +117,8 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
             )
         )
+
+        root.addView(features)
 
         val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -187,20 +189,31 @@ class MainActivity : Activity() {
 
     private fun addFeatureButton(
         parent: LinearLayout,
-        label: String,
+        icon: String,
+        description: String,
         action: () -> Unit
     ) {
+        val density = resources.displayMetrics.density
+
         val button = Button(this).apply {
-            text = label
+            text = icon
+            textSize = 20f
+            contentDescription = description
+            isAllCaps = false
+            setPadding(0, 0, 0, 0)
+            minWidth = 0
+            minHeight = 0
             setOnClickListener { action() }
         }
-        parent.addView(
-            button,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+
+        val params = LinearLayout.LayoutParams(
+            0, (48 * density).toInt(), 1f
         )
+        params.setMargins(
+            (3 * density).toInt(), (4 * density).toInt(),
+            (3 * density).toInt(), (4 * density).toInt()
+        )
+        parent.addView(button, params)
     }
 
     private fun openCamera() {
