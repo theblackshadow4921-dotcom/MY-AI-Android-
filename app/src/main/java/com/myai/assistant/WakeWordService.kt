@@ -306,10 +306,7 @@ class WakeWordService : Service() {
             return
         }
 
-        speak(
-            "जी सर, मैं सुन रहा हूँ। अब बोलिए।",
-            "JARVIS_LISTEN"
-        )
+        startRecognitionNow()
     }
 
     private fun startRecognitionNow() {
