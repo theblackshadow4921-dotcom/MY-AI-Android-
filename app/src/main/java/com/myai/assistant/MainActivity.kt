@@ -188,7 +188,29 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openAppByVoice(command: String): Boolean {
+        val text = command.lowercase(Locale.ROOT)
+
+        if (text.contains("youtube") || text.contains("यूट्यूब")) {
+            val launchIntent = packageManager.getLaunchIntentForPackage("com.google.android.youtube")
+            if (launchIntent != null) {
+                startActivity(launchIntent)
+                addMessage("जी सर, YouTube खोल रहा हूँ।")
+            } else {
+                addMessage("सर, YouTube ऐप इस फोन में नहीं मिला।")
+            }
+            return true
+        }
+
+        return false
+    }
+
     private fun askGemini(question: String) {
+        if (openAppByVoice(question)) {
+            tts?.speak("जी सर, YouTube खोल रहा हूँ।", TextToSpeech.QUEUE_FLUSH, null, "MY_AI_COMMAND")
+            return
+        }
+
         addMessage("MY AI: जवाब तैयार हो रहा है...")
 
         thread {
