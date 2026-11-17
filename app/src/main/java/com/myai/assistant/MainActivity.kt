@@ -42,7 +42,7 @@ class MainActivity : Activity() {
                     addMessage("आपने कहा: $message")
 
                 WakeWordService.ACTION_REPLY ->
-                    addMessage("MY AI: $message")
+                    addMessage("SHAKTI AI: $message")
             }
         }
     }
@@ -88,7 +88,7 @@ class MainActivity : Activity() {
         }
 
         val title = TextView(this).apply {
-            text = "MY AI ASSISTANT"
+            text = "SHAKTI AI ASSISTANT"
             textSize = 25f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
@@ -170,7 +170,7 @@ class MainActivity : Activity() {
         root.addView(bottom)
         setContentView(root)
 
-        addMessage("नमस्ते! MY AI में आपका स्वागत है।")
+        addMessage("नमस्ते! SHAKTI AI में आपका स्वागत है।")
         startWakeWordIfPermitted()
 
     }
@@ -194,7 +194,7 @@ class MainActivity : Activity() {
             } else {
                 startService(serviceIntent)
             }
-            addMessage("JARVIS सक्रिय हो रहा है। HEY JARVIS बोलें।")
+            addMessage("SHAKTI सक्रिय हो रहा है। HI SHAKTI बोलें।")
         } catch (e: Exception) {
             addMessage("Wake Word Service शुरू नहीं हो सकी: ${e.message}")
         }
@@ -223,7 +223,7 @@ class MainActivity : Activity() {
             return
         }
 
-        addMessage("MY AI: जवाब तैयार हो रहा है...")
+        addMessage("SHAKTI AI: जवाब तैयार हो रहा है...")
 
         thread {
             var connection: HttpURLConnection? = null
@@ -267,14 +267,14 @@ class MainActivity : Activity() {
             }
 
             runOnUiThread {
-                addMessage("MY AI: $reply")
+                addMessage("SHAKTI AI: $reply")
                 tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "MY_AI_REPLY")
             }
         }
     }
 
     private fun analyzeImage(photo: Bitmap) {
-        addMessage("MY AI: फोटो का विश्लेषण कर रहा हूँ...")
+        addMessage("SHAKTI AI: फोटो का विश्लेषण कर रहा हूँ...")
 
         thread {
             var connection: HttpURLConnection? = null
@@ -330,7 +330,7 @@ class MainActivity : Activity() {
             }
 
             runOnUiThread {
-                addMessage("MY AI: $reply")
+                addMessage("SHAKTI AI: $reply")
                 tts?.speak(
                     reply,
                     TextToSpeech.QUEUE_FLUSH,
@@ -567,7 +567,7 @@ class MainActivity : Activity() {
             ) {
                 startWakeWordIfPermitted()
             } else {
-                addMessage("JARVIS के लिए Microphone permission जरूरी है।")
+                addMessage("SHAKTI के लिए Microphone permission जरूरी है।")
             }
         } else if (requestCode == MIC_PERMISSION_CODE) {
             if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {

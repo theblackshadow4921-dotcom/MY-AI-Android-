@@ -40,11 +40,11 @@ class WakeWordService : Service() {
         const val ACTION_WAKE_WORD_DETECTED =
             "com.myai.assistant.WAKE_WORD_DETECTED"
         const val ACTION_STATUS =
-            "com.myai.assistant.JARVIS_STATUS"
+            "com.myai.assistant.SHAKTI_STATUS"
         const val ACTION_TRANSCRIPT =
-            "com.myai.assistant.JARVIS_TRANSCRIPT"
+            "com.myai.assistant.SHAKTI_TRANSCRIPT"
         const val ACTION_REPLY =
-            "com.myai.assistant.JARVIS_REPLY"
+            "com.myai.assistant.SHAKTI_REPLY"
         const val ACTION_STOP =
             "com.myai.assistant.STOP_WAKE_WORD"
 
@@ -85,8 +85,8 @@ class WakeWordService : Service() {
                 override fun onDone(id: String?) {
                     handler.post {
                         when (id) {
-                            "JARVIS_LISTEN" -> startRecognitionNow()
-                            "JARVIS_RESTART" -> startDetector()
+                            "SHAKTI_LISTEN" -> startRecognitionNow()
+                            "SHAKTI_RESTART" -> startDetector()
                         }
                     }
                 }
@@ -106,8 +106,8 @@ class WakeWordService : Service() {
     private fun handleTtsError(id: String?) {
         handler.post {
             when (id) {
-                "JARVIS_LISTEN" -> startRecognitionNow()
-                "JARVIS_RESTART" -> startDetector()
+                "SHAKTI_LISTEN" -> startRecognitionNow()
+                "SHAKTI_RESTART" -> startDetector()
             }
         }
     }
@@ -218,8 +218,8 @@ class WakeWordService : Service() {
             audioRecord = recorder
             recorder.startRecording()
 
-            Log.i(TAG, "Listening for HEY JARVIS")
-            sendStatus("JARVIS चालू है। HEY JARVIS बोलें।")
+            Log.i(TAG, "Listening for HI SHAKTI")
+            sendStatus("SHAKTI चालू है। HI SHAKTI बोलें।")
 
             val buffer = ShortArray(1600)
 
@@ -353,7 +353,7 @@ class WakeWordService : Service() {
                             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
                                 "सर, माइक्रोफोन की अनुमति नहीं मिली।"
                             else ->
-                                "सर, आवाज़ पहचान में समस्या आई। फिर से HEY JARVIS बोलिए।"
+                                "सर, आवाज़ पहचान में समस्या आई। फिर से HI SHAKTI बोलिए।"
                         }
 
                         sendStatus("Voice error: $error")
@@ -490,7 +490,7 @@ class WakeWordService : Service() {
 
         val target = text.replace(
             Regex(
-                "hey jarvis|जार्विस|सर|खोल दो|खोलो|खोलिए|open|launch|चलाओ|चला दो|please",
+                "hi shakti|शक्ति|सर|खोल दो|खोलो|खोलिए|open|launch|चलाओ|चला दो|please",
                 RegexOption.IGNORE_CASE
             ),
             ""
@@ -533,7 +533,7 @@ class WakeWordService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "MY AI App Launch",
+                "SHAKTI AI App Launch",
                 NotificationManager.IMPORTANCE_HIGH
             )
             getSystemService(NotificationManager::class.java)
@@ -554,7 +554,7 @@ class WakeWordService : Service() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
         }.setSmallIcon(android.R.drawable.sym_def_app_icon)
-            .setContentTitle("MY AI — ऐप खोलें")
+            .setContentTitle("SHAKTI AI — ऐप खोलें")
             .setContentText("$appName खोलने के लिए यहाँ दबाएँ")
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -641,7 +641,7 @@ class WakeWordService : Service() {
     }
 
     private fun speakAndRestart(message: String) {
-        speak(message, "JARVIS_RESTART")
+        speak(message, "SHAKTI_RESTART")
     }
 
     private fun speak(
@@ -666,7 +666,7 @@ class WakeWordService : Service() {
         } else {
             handler.postDelayed({
                 if (serviceActive) {
-                    if (utteranceId == "JARVIS_LISTEN") {
+                    if (utteranceId == "SHAKTI_LISTEN") {
                         startRecognitionNow()
                     } else {
                         startDetector()
@@ -688,7 +688,7 @@ class WakeWordService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "MY AI Wake Word",
+                "SHAKTI AI Wake Word",
                 NotificationManager.IMPORTANCE_LOW
             )
 
@@ -720,8 +720,8 @@ class WakeWordService : Service() {
 
         return builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("MY AI - JARVIS")
-            .setContentText("HEY JARVIS सुन रहा है")
+            .setContentTitle("SHAKTI AI - SHAKTI")
+            .setContentText("HI SHAKTI सुन रहा है")
             .setOngoing(true)
             .addAction(
                 android.R.drawable.ic_media_pause,
