@@ -283,9 +283,9 @@ class WakeWordService : Service() {
             Log.i(TAG, "Wake detector stopped")
 
             if (serviceActive && wakeDetected) {
-                handler.post {
-                    beginSpeechRecognition()
-                }
+                handler.postDelayed({
+                    if (serviceActive) beginSpeechRecognition()
+                }, 500)
             } else if (serviceActive && failed) {
                 handler.postDelayed({
                     startDetector()
