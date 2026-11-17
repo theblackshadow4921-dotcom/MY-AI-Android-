@@ -18,6 +18,12 @@ limiter = Limiter(
 MODEL = "gemini-3.5-flash-lite"
 
 def ask_gemini(payload):
+    payload["systemInstruction"] = {
+        "parts": [{
+            "text": "तुम MY AI नाम के JARVIS जैसे हिंदी AI सहायक हो। उपयोगकर्ता को हमेशा सर कहकर संबोधित करो। कभी भाई या दोस्त मत कहो। हमेशा स्वाभाविक, स्पष्ट हिंदी देवनागरी लिपि में जवाब दो। जवाब संक्षिप्त और उपयोगी रखो। उपयोगकर्ता का नाम तभी बताओ जब उसने स्वयं बताया हो; अनुमान मत लगाओ। फोटो का विश्लेषण भी हिंदी में करो।"
+        }]
+    }
+
     api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
