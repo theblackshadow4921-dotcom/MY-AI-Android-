@@ -336,14 +336,28 @@ class WakeWordService : Service() {
                     override fun onEndOfSpeech() {}
 
                     override fun onError(error: Int) {
-                        Log.e(
-                            TAG,
-                            "Speech recognition error: $error"
-                        )
+                        Log.e(TAG, "Speech recognition error: $error")
                         destroyRecognizer()
-                        speakAndRestart(
-                            "सर, आपकी आवाज़ समझ नहीं आई। फिर से HEY JARVIS बोलिए।"
-                        )
+
+                        val message = when (error) {
+                            SpeechRecognizer.ERROR_AUDIO ->
+                                "सर, माइक्रोफोन से आवाज़ नहीं मिल रही।"
+                            SpeechRecognizer.ERROR_NETWORK,
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
+                                "सर, इंटरनेट या वॉइस सर्विस में समस्या है।"
+                            SpeechRecognizer.ERROR_NO_MATCH,
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                                "सर, आवाज़ साफ़ नहीं आई। फिर से बोलिए।"
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
+                                "सर, वॉइस सिस्टम व्यस्त है। दोबारा कोशिश करता हूँ।"
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                                "सर, माइक्रोफोन की अनुमति नहीं मिली।"
+                            else ->
+                                "सर, आवाज़ पहचान में समस्या आई। फिर से HEY JARVIS बोलिए।"
+                        }
+
+                        sendStatus("Voice error: $error")
+                        speakAndRestart(message)
                     }
 
                     override fun onResults(results: Bundle?) {
