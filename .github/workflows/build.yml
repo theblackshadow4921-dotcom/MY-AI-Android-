@@ -26,7 +26,7 @@ jobs:
 
       - name: Generate SHAKTI Wake Word
         run: |
-          python3 -m pip install sherpa-onnx sentencepiece
+          python3 -m pip install sherpa-onnx sentencepiece pypinyin
           MODEL="app/src/main/assets/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
           echo "HI SHAKTI @HI_SHAKTI" > "$MODEL/keywords_raw.txt"
           sherpa-onnx-cli text2token --tokens "$MODEL/tokens.txt" --tokens-type bpe --bpe-model "$MODEL/bpe.model" "$MODEL/keywords_raw.txt" "$MODEL/keywords.txt"
