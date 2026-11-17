@@ -32,9 +32,17 @@ class MainActivity : Activity() {
 
     private val wakeWordReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == WakeWordService.ACTION_WAKE_WORD_DETECTED) {
-                addMessage("हाँ, मैं सुन रहा हूँ। बोलिए...")
-                openVoice()
+            val message = intent?.getStringExtra("message") ?: return
+
+            when (intent.action) {
+                WakeWordService.ACTION_STATUS ->
+                    addMessage(message)
+
+                WakeWordService.ACTION_TRANSCRIPT ->
+                    addMessage("आपने कहा: $message")
+
+                WakeWordService.ACTION_REPLY ->
+                    addMessage("MY AI: $message")
             }
         }
     }
@@ -56,7 +64,11 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val wakeFilter = IntentFilter(WakeWordService.ACTION_WAKE_WORD_DETECTED)
+        val wakeFilter = IntentFilter().apply {
+            addAction(WakeWordService.ACTION_STATUS)
+            addAction(WakeWordService.ACTION_TRANSCRIPT)
+            addAction(WakeWordService.ACTION_REPLY)
+        }
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(wakeWordReceiver, wakeFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
