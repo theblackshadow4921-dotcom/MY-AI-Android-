@@ -432,7 +432,124 @@ class WakeWordService : Service() {
         speechRecognizer = null
     }
 
+
+    private fun handleAppCommand(question: String): Boolean {
+        val text = question.lowercase(Locale.ROOT)
+
+        val openWords = listOf(
+            "खोलो", "खोल दो", "खोलिए", "open",
+            "launch", "चलाओ", "चला दो"
+        )
+
+        if (openWords.none { text.contains(it) }) return false
+
+        val aliases = listOf(
+            listOf("youtube", "यूट्यूब") to "com.google.android.youtube",
+            listOf("whatsapp", "व्हाट्सएप") to "com.whatsapp",
+            listOf("instagram", "इंस्टाग्राम") to "com.instagram.android",
+            listOf("chrome", "क्रोम") to "com.android.chrome",
+            listOf("chatgpt", "chat gpt", "चैट जीपीटी") to "com.openai.chatgpt",
+            listOf("telegram", "टेलीग्राम") to "org.telegram.messenger",
+            listOf("spotify", "स्पॉटिफाई") to "com.spotify.music",
+            listOf("play store", "प्ले स्टोर") to "com.android.vending",
+            listOf("gmail", "जीमेल") to "com.google.android.gm"
+        )
+
+        val knownPackage = aliases.firstOrNull { item ->
+            item.first.any { text.contains(it) }
+        }?.second
+
+        val launcherQuery = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+
+        val apps = packageManager.queryIntentActivities(launcherQuery, 0)
+
+        val target = text.replace(
+            Regex(
+                "hey jarvis|जार्विस|सर|खोल दो|खोलो|खोलिए|open|launch|चलाओ|चला दो|please",
+                RegexOption.IGNORE_CASE
+            ),
+            ""
+        ).trim()
+
+        val matched = if (knownPackage == null) {
+            apps.firstOrNull { info ->
+                val label = info.loadLabel(packageManager)
+                    .toString().lowercase(Locale.ROOT)
+                target.isNotBlank() &&
+                    (label.contains(target) || target.contains(label))
+            }
+        } else {
+            apps.firstOrNull {
+                it.activityInfo.packageName == knownPackage
+            }
+        }
+
+        val packageToOpen =
+            knownPackage ?: matched?.activityInfo?.packageName
+
+        if (packageToOpen.isNullOrBlank()) {
+            speakAndRestart("सर, यह ऐप फोन में नहीं मिला।")
+            return true
+        }
+
+        val launchIntent =
+            packageManager.getLaunchIntentForPackage(packageToOpen)
+
+        if (launchIntent == null) {
+            speakAndRestart("सर, यह ऐप इंस्टॉल नहीं है।")
+            return true
+        }
+
+        val appName = matched?.loadLabel(packageManager)?.toString()
+            ?: target.ifBlank { "ऐप" }
+
+        val channelId = "myai_app_launch"
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "MY AI App Launch",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(channel)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            packageToOpen.hashCode(),
+            launchIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, channelId)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }.setSmallIcon(android.R.drawable.sym_def_app_icon)
+            .setContentTitle("MY AI — ऐप खोलें")
+            .setContentText("$appName खोलने के लिए यहाँ दबाएँ")
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        getSystemService(NotificationManager::class.java)
+            .notify(2002, notification)
+
+        speakAndRestart(
+            "जी सर, $appName खोलने के लिए नोटिफिकेशन दबाइए।"
+        )
+
+        return true
+    }
+
     private fun askGemini(question: String) {
+        if (handleAppCommand(question)) return
+
         sendStatus("सर, जवाब तैयार कर रहा हूँ।")
 
         thread {
