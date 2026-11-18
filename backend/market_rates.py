@@ -201,7 +201,8 @@ def fetch_one_commodity(item, markets=MARKETS):
     return found, errors
 
 def _fetch_mandi_prices_uncached(commodity=None, state=None, district=None,
-                                 market=None, limit=100, offset=0, category=None):
+                                 market=None, limit=100, offset=0, category=None,
+                                 commodity_offset=0, commodity_limit=12):
     try:
         commodities = commodity_list(category)
 
@@ -241,13 +242,18 @@ def _fetch_mandi_prices_uncached(commodity=None, state=None, district=None,
                         "error": "यह स्थानीय मंडी सूची में नहीं मिली।"
                     }
 
+            start_commodity = max(0, int(commodity_offset))
+            batch_size = max(1, min(int(commodity_limit), 15))
+            selected_commodities = commodities[
+                start_commodity:start_commodity + batch_size
+            ]
             records = []
             errors = []
             # सीमित concurrency: बहुत अधिक एकसाथ API requests न भेजें
-            with ThreadPoolExecutor(max_workers=8) as pool:
+            with ThreadPoolExecutor(max_workers=2) as pool:
                 jobs = [
                     pool.submit(fetch_one_commodity, item, selected_markets)
-                    for item in commodities
+                    for item in selected_commodities
                 ]
                 for job in as_completed(jobs):
                     try:
@@ -258,6 +264,19 @@ def _fetch_mandi_prices_uncached(commodity=None, state=None, district=None,
                         errors.append(type(exc).__name__)
 
             records.sort(key=lambda x: x["arrival_date"], reverse=True)
+            next_commodity_offset = start_commodity + len(selected_commodities)
+            category_pagination = {
+                "category": category,
+                "total_commodities": len(commodities),
+                "commodity_offset": start_commodity,
+                "commodities_in_batch": len(selected_commodities),
+                "next_commodity_offset": (
+                    next_commodity_offset
+                    if next_commodity_offset < len(commodities)
+                    else None
+                ),
+                "has_more_commodities": next_commodity_offset < len(commodities),
+            }
 
         else:
             return {
@@ -277,7 +296,8 @@ def _fetch_mandi_prices_uncached(commodity=None, state=None, district=None,
             "count": len(records),
             "records": records,
             "note": "सरकारी थोक मंडी भाव। क्विंटल और किलो के भाव केवल ज्ञात इकाइयों में गणना करके दिए गए हैं। यह खुदरा दुकान का भाव नहीं है।",
-            "warnings": list(dict.fromkeys(errors))[:8]
+            "warnings": list(dict.fromkeys(errors))[:8],
+            "pagination": category_pagination if category else None
         }
 
     except requests.RequestException as exc:
@@ -300,7 +320,8 @@ _MARKET_CACHE_TTL = 24 * 60 * 60
 
 def fetch_mandi_prices(commodity=None, state=None, district=None,
                        market=None, limit=100, offset=0, category=None,
-                       force_refresh=False):
+                       force_refresh=False, commodity_offset=0,
+                       commodity_limit=12):
     key = (
         str(commodity or "").casefold(),
         str(category or "").casefold(),
@@ -309,6 +330,8 @@ def fetch_mandi_prices(commodity=None, state=None, district=None,
         str(market or "").casefold(),
         int(limit),
         int(offset),
+        int(commodity_offset),
+        int(commodity_limit),
     )
 
     now = time.time()
@@ -330,6 +353,8 @@ def fetch_mandi_prices(commodity=None, state=None, district=None,
         limit=limit,
         offset=offset,
         category=category,
+        commodity_offset=commodity_offset,
+        commodity_limit=commodity_limit,
     )
 
     if result.get("ok"):
