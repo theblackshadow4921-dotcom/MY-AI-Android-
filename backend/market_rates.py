@@ -381,8 +381,8 @@ def fetch_mandi_prices(commodity=None, state=None, district=None,
                         result["cache"] = "REDIS_HIT"
                         result["cache_age_seconds"] = max(0, age)
                         return result
-            except Exception:
-                pass
+            except Exception as exc:
+                print("[REDIS] Cache read FAILED -", type(exc).__name__)
 
         with _MARKET_CACHE_LOCK:
             cached = _MARKET_CACHE.get(key)
@@ -421,7 +421,8 @@ def fetch_mandi_prices(commodity=None, state=None, district=None,
                     json.dumps(saved, ensure_ascii=False)
                 )
                 result["cache_backend"] = "redis"
-            except Exception:
+            except Exception as exc:
+                print("[REDIS] Cache write FAILED -", type(exc).__name__)
                 result["cache_backend"] = "memory_fallback"
         else:
             result["cache_backend"] = "memory"
