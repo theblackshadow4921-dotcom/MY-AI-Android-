@@ -5,6 +5,12 @@ from flask import Flask, request, jsonify
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
+try:
+    from .market_rates import fetch_mandi_prices, normalize_commodity, commodity_list
+except ImportError:
+    from market_rates import fetch_mandi_prices, normalize_commodity, commodity_list
+
+
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 
@@ -97,6 +103,36 @@ def home():
     return jsonify({"status": "MY AI backend online"})
 
 
+
+
+
+@app.route("/market-rates", methods=["GET"])
+@limiter.limit("20 per minute")
+def market_rates():
+    commodity = request.args.get("commodity", "").strip() or None
+    category = request.args.get("category", "").strip().casefold() or None
+    state = request.args.get("state", "").strip() or None
+    district = request.args.get("district", "").strip() or None
+    market = request.args.get("market", "").strip() or None
+
+    for value in (commodity, category, state, district, market):
+        if value and len(value) > 100:
+            return jsonify({"ok": False, "error": "खोज का नाम बहुत लंबा है।"}), 400
+
+    result = fetch_mandi_prices(
+        commodity=commodity,
+        category=category,
+        state=state,
+        district=district,
+        market=market,
+        limit=100
+    )
+
+    if not result.get("ok"):
+        return jsonify(result), 502
+    return jsonify(result)
+
+
 @app.route("/chat", methods=["POST"])
 @limiter.limit("10 per minute")
 def chat():
@@ -106,14 +142,85 @@ def chat():
     if not question or len(question) > 10000:
         return jsonify({"reply": "सवाल खाली है या बहुत बड़ा है।"}), 400
 
+    mandi_context = ""
+    q = question.casefold()
+
+    price_words = (
+        "भाव", "रेट", "दाम", "मंडी", "कीमत", "मूल्य",
+        "price", "rate", "bhav", "mandi"
+    )
+    category_words = {
+        "vegetables": ("सब्जी", "सब्जियां", "सब्जियों", "vegetables", "all vegetables"),
+        "fruits": ("फल", "फलों", "फलो", "fruits", "all fruits"),
+        "cereals": ("अनाज", "गेहूं", "गेहूँ", "चावल", "धान", "मक्का", "फसल", "cereals", "grains"),
+        "pulses": ("दाल", "दालें", "दालों", "चना", "अरहर", "मसूर", "मूंग", "उड़द", "pulses"),
+        "spices": ("मसाला", "मसाले", "मसालों", "हल्दी", "धनिया", "spices"),
+    }
+
+    is_market_question = any(word in q for word in price_words)
+    if is_market_question:
+        try:
+            commodities = commodity_list()
+            matched = normalize_commodity(question, commodities)
+            result = None
+
+            if matched:
+                result = fetch_mandi_prices(
+                    commodity=matched["cmdt_name"], limit=120
+                )
+            else:
+                selected_category = None
+                for category, words in category_words.items():
+                    if any(word in q for word in words):
+                        selected_category = category
+                        break
+
+                if selected_category:
+                    result = fetch_mandi_prices(
+                        category=selected_category, limit=120
+                    )
+
+            if result and result.get("ok"):
+                records = result.get("records", [])
+                mandi_context = (
+                    "\n\nसरकारी AGMARKNET मंडी डेटा:\n"
+                    + str(records[:120])
+                    + "\n\nउत्तर देने के अनिवार्य नियम:"
+                    + "\n1. केवल दिए गए सरकारी रिकॉर्ड के आधार पर भाव बताएं।"
+                    + "\n2. हर भाव के साथ मंडी और रिकॉर्ड की तारीख बताएं।"
+                    + "\n3. जहां उपलब्ध हो, प्रति क्विंटल और प्रति किलो दोनों भाव बताएं।"
+                    + "\n4. क्विंटल से किलो का हिसाब: प्रति क्विंटल भाव को 100 से भाग दें।"
+                    + "\n5. जिस इकाई का डेटा उपलब्ध नहीं है, उसका अनुमान न लगाएं।"
+                    + "\n6. पुराने रिकॉर्ड को आज का भाव न बताएं।"
+                    + "\n7. रिकॉर्ड खाली हो तो साफ बताएं कि उपलब्ध रिकॉर्ड नहीं मिला।"
+                    + "\n8. यह थोक मंडी भाव है, खुदरा दुकान का भाव नहीं।"
+                )
+            elif result:
+                mandi_context = (
+                    "\n\nमंडी डेटा उपलब्ध नहीं: "
+                    + result.get("error", "अज्ञात त्रुटि")
+                )
+            else:
+                mandi_context = (
+                    "\n\nकृपया उपयोगकर्ता से फसल का स्पष्ट नाम या श्रेणी पूछें।"
+                    " बिना सरकारी रिकॉर्ड के भाव न बताएं।"
+                )
+
+        except Exception:
+            app.logger.exception("AGMARKNET lookup failed")
+            mandi_context = (
+                "\n\nसरकारी मंडी डेटा प्राप्त नहीं हो पाया।"
+                " कोई भाव अनुमान से न बताएं।"
+            )
+
+    prompt = question + mandi_context
     answer, status = ask_gemini(
-        {"contents": [{"parts": [{"text": question}]}]},
+        {"contents": [{"parts": [{"text": prompt}]}]},
         use_search=True
     )
 
     if answer is None:
         return jsonify({"reply": "Gemini सेवा में समस्या हुई।"}), status
-
     return jsonify({"reply": answer})
 
 
