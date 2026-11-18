@@ -226,7 +226,7 @@ def chat():
     prompt = question + mandi_context
     answer, status = ask_gemini(
         {"contents": [{"parts": [{"text": prompt}]}]},
-        use_search=True
+        use_search=not bool(mandi_context.strip())
     )
 
     if answer is None:
