@@ -296,153 +296,145 @@ class WakeWordService : Service() {
 
     private fun beginSpeechRecognition() {
         if (!serviceActive) return
-
         sendStatus("जी सर, मैं सुन रहा हूँ। अब बोलिए।")
-
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            speakAndRestart(
-                "सर, इस फोन में आवाज़ पहचान उपलब्ध नहीं है।"
-            )
-            return
-        }
-
         startRecognitionNow()
     }
 
     private fun startRecognitionNow() {
         if (!serviceActive) return
+        worker = Thread {
+            runOfflineHindiRecognition()
+        }.also { it.start() }
+    }
+
+    private fun runOfflineHindiRecognition() {
+        var recorder: AudioRecord? = null
 
         try {
-            destroyRecognizer()
+            sendStatus("हिंदी Offline Voice मॉडल तैयार कर रहा हूँ।")
 
-            speechRecognizer =
-                SpeechRecognizer.createSpeechRecognizer(
-                    applicationContext
-                )
-
-            speechRecognizer?.setRecognitionListener(
-                object : RecognitionListener {
-
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        Log.i(TAG, "Speech recognition ready")
-                    }
-
-                    override fun onBeginningOfSpeech() {}
-
-                    override fun onRmsChanged(rmsdB: Float) {}
-
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-
-                    override fun onEndOfSpeech() {}
-
-                    override fun onError(error: Int) {
-                        Log.e(TAG, "Speech recognition error: $error")
-                        destroyRecognizer()
-
-                        val message = when (error) {
-                            SpeechRecognizer.ERROR_AUDIO ->
-                                "सर, माइक्रोफोन से आवाज़ नहीं मिल रही।"
-                            SpeechRecognizer.ERROR_NETWORK,
-                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                                "सर, इंटरनेट या वॉइस सर्विस में समस्या है।"
-                            SpeechRecognizer.ERROR_NO_MATCH,
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
-                                "सर, आवाज़ साफ़ नहीं आई। फिर से बोलिए।"
-                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
-                                "सर, वॉइस सिस्टम व्यस्त है। दोबारा कोशिश करता हूँ।"
-                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
-                                "सर, माइक्रोफोन की अनुमति नहीं मिली।"
-                            else ->
-                                "सर, आवाज़ पहचान में समस्या आई। फिर से SHAKTI बोलिए।"
-                        }
-
-                        sendStatus("Voice error: $error")
-                        speakAndRestart(message)
-                    }
-
-                    override fun onResults(results: Bundle?) {
-                        val spoken = results
-                            ?.getStringArrayList(
-                                SpeechRecognizer.RESULTS_RECOGNITION
-                            )
-                            ?.firstOrNull()
-
-                        destroyRecognizer()
-
-                        if (spoken.isNullOrBlank()) {
-                            speakAndRestart(
-                                "सर, कृपया फिर से बोलिए।"
-                            )
-                        } else {
-                            sendBroadcast(
-                                Intent(ACTION_TRANSCRIPT)
-                                    .setPackage(packageName)
-                                    .putExtra("message", spoken)
-                            )
-                            askGemini(spoken)
-                        }
-                    }
-
-                    override fun onPartialResults(
-                        partialResults: Bundle?
-                    ) {}
-
-                    override fun onEvent(
-                        eventType: Int,
-                        params: Bundle?
-                    ) {}
-                }
-            )
-
-            val intent = Intent(
-                RecognizerIntent.ACTION_RECOGNIZE_SPEECH
-            ).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE,
-                    "hi-IN"
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,
-                    "hi-IN"
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_MAX_RESULTS,
-                    1
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_PARTIAL_RESULTS,
-                    true
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
-                    3000L
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    2000L
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    1200L
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_CALLING_PACKAGE,
-                    packageName
-                )
+            val asr = OfflineHindiAsr(this)
+            if (!asr.ensureModel()) {
+                throw IllegalStateException("Hindi model डाउनलोड नहीं हुआ")
             }
 
-            speechRecognizer?.startListening(intent)
+            if (!serviceActive) return
+            sendStatus("सर, अब बोलिए। मैं आपकी आवाज़ सुन रहा हूँ।")
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Speech recognition start failed", e)
-            destroyRecognizer()
-            speakAndRestart(
-                "सर, आवाज़ पहचान शुरू नहीं हो सकी।"
+            val minBuffer = AudioRecord.getMinBufferSize(
+                SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
             )
+            if (minBuffer <= 0) {
+                throw IllegalStateException("Audio buffer गलत है")
+            }
+
+            recorder = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                SAMPLE_RATE,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                maxOf(minBuffer, 3200) * 2
+            )
+
+            if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                throw IllegalStateException("Microphone शुरू नहीं हुआ")
+            }
+
+            audioRecord = recorder
+            recorder.startRecording()
+
+            val buffer = ShortArray(1600)
+            val audio = ArrayList<Float>()
+            var speechStarted = false
+            var silentSamples = 0
+            val maxSamples = SAMPLE_RATE * 12
+            val silenceLimit = SAMPLE_RATE * 15 / 10
+
+            while (serviceActive && audio.size < maxSamples) {
+                val count = recorder.read(buffer, 0, buffer.size)
+                if (count <= 0) continue
+
+                var energy = 0.0
+                for (i in 0 until count) {
+                    val value = buffer[i].toFloat()
+                    energy += value * value
+                    audio.add(value / 32768.0f)
+                }
+
+                val rms = kotlin.math.sqrt(energy / count)
+                if (rms > 450.0) {
+                    speechStarted = true
+                    silentSamples = 0
+                } else if (speechStarted) {
+                    silentSamples += count
+                }
+
+                if (speechStarted && silentSamples >= silenceLimit) {
+                    break
+                }
+            }
+
+            try {
+                if (recorder.recordingState ==
+                    AudioRecord.RECORDSTATE_RECORDING
+                ) recorder.stop()
+            } catch (_: Exception) {}
+
+            recorder.release()
+            recorder = null
+            audioRecord = null
+
+            if (!serviceActive) return
+
+            if (!speechStarted || audio.size < 4000) {
+                handler.post {
+                    if (serviceActive) {
+                        speakAndRestart("सर, आपकी आवाज़ साफ़ नहीं आई। फिर से बोलिए।")
+                    }
+                }
+                return
+            }
+
+            sendStatus("सर, आपकी हिंदी आवाज़ पहचान रहा हूँ।")
+            val spoken = asr.transcribe(audio.toFloatArray())
+
+            handler.post {
+                if (!serviceActive) return@post
+
+                if (spoken.isBlank()) {
+                    speakAndRestart("सर, मैं आपकी बात समझ नहीं पाया। फिर से बोलिए।")
+                } else {
+                    Log.i(TAG, "Offline Hindi transcript: $spoken")
+                    sendBroadcast(
+                        Intent(ACTION_TRANSCRIPT)
+                            .setPackage(packageName)
+                            .putExtra("message", spoken)
+                    )
+                    askGemini(spoken)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Offline Hindi recognition failed", e)
+            handler.post {
+                if (serviceActive) {
+                    sendStatus("Offline Voice में समस्या: ${e.message}")
+                    speakAndRestart(
+                        "सर, हिंदी Offline Voice तैयार नहीं हो पाया। इंटरनेट और मॉडल डाउनलोड जाँचें।"
+                    )
+                }
+            }
+        } finally {
+            try {
+                recorder?.let {
+                    if (it.recordingState ==
+                        AudioRecord.RECORDSTATE_RECORDING
+                    ) it.stop()
+                    it.release()
+                }
+            } catch (_: Exception) {}
+            audioRecord = null
         }
     }
 
