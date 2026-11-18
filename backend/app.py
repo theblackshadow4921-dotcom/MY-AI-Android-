@@ -17,12 +17,15 @@ limiter = Limiter(
 
 MODEL = "gemini-3.5-flash-lite"
 
-def ask_gemini(payload):
+def ask_gemini(payload, use_search=False):
     payload["systemInstruction"] = {
         "parts": [{
             "text": "तुम MY AI नाम के JARVIS जैसे हिंदी AI सहायक हो। उपयोगकर्ता को हमेशा सर कहकर संबोधित करो। कभी भाई या दोस्त मत कहो। हमेशा स्वाभाविक, स्पष्ट हिंदी देवनागरी लिपि में जवाब दो। जवाब संक्षिप्त और उपयोगी रखो। उपयोगकर्ता का नाम तभी बताओ जब उसने स्वयं बताया हो; अनुमान मत लगाओ। फोटो का विश्लेषण भी हिंदी में करो।"
         }]
     }
+
+    if use_search:
+        payload["tools"] = [{"google_search": {}}]
 
     api_key = os.getenv("GEMINI_API_KEY")
 
@@ -46,7 +49,24 @@ def ask_gemini(payload):
             return None, 502
 
         result = response.json()
-        answer = result["candidates"][0]["content"]["parts"][0]["text"]
+        candidate = result["candidates"][0]
+        parts = candidate["content"]["parts"]
+        answer = "".join(part.get("text", "") for part in parts)
+
+        sources = []
+        seen = set()
+        metadata = candidate.get("groundingMetadata", {})
+        for chunk in metadata.get("groundingChunks", []):
+            web = chunk.get("web", {})
+            uri = web.get("uri")
+            title = web.get("title", "वेबसाइट")
+            if uri and uri not in seen:
+                seen.add(uri)
+                sources.append(f"- {title}: {uri}")
+
+        if sources:
+            answer += "\n\nजानकारी के स्रोत:\n" + "\n".join(sources)
+
         return answer, 200
 
     except (requests.RequestException, KeyError, IndexError, ValueError):
@@ -67,9 +87,10 @@ def chat():
     if not question or len(question) > 10000:
         return jsonify({"reply": "सवाल खाली है या बहुत बड़ा है।"}), 400
 
-    answer, status = ask_gemini({
-        "contents": [{"parts": [{"text": question}]}]
-    })
+    answer, status = ask_gemini(
+        {"contents": [{"parts": [{"text": question}]}]},
+        use_search=True
+    )
 
     if answer is None:
         return jsonify({"reply": "Gemini सेवा में समस्या हुई।"}), status
