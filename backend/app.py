@@ -45,6 +45,19 @@ def ask_gemini(payload, use_search=False):
             timeout=(20, 120)
         )
 
+        if response.status_code == 429 and use_search:
+            app.logger.warning(
+                "Google Search quota unavailable. Retrying without Search."
+            )
+            fallback_payload = dict(payload)
+            fallback_payload.pop("tools", None)
+            response = requests.post(
+                url,
+                headers={"x-goog-api-key": api_key},
+                json=fallback_payload,
+                timeout=(20, 120)
+            )
+
         if not response.ok:
             app.logger.error(
                 "Gemini API HTTP %s: %s",
