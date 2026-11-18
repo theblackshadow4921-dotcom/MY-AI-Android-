@@ -2,3 +2,4 @@ Flask
 requests
 gunicorn
 Flask-Limiter
+redis>=5,<7

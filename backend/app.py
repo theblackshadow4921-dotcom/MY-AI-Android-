@@ -12,7 +12,7 @@ limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=[],
-    storage_uri="memory://"
+    storage_uri=os.getenv("REDIS_URL", "").strip() or "memory://"
 )
 
 MODEL = "gemini-3.5-flash-lite"

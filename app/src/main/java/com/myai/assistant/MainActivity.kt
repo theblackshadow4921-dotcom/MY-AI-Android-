@@ -1,4 +1,8 @@
 package com.myai.assistant
+import java.io.File
+import androidx.core.content.FileProvider
+import android.provider.MediaStore
+import android.graphics.BitmapFactory
 
 import java.io.ByteArrayOutputStream
 import android.util.Base64
@@ -51,6 +55,7 @@ class MainActivity : Activity() {
     private lateinit var input: EditText
     private var tts: TextToSpeech? = null
     private var selectedPhone = ""
+    private var cameraPhotoUri: Uri? = null
 
     companion object {
         const val CAMERA_CODE = 101
@@ -386,10 +391,59 @@ class MainActivity : Activity() {
 
     private fun launchCamera() {
         try {
-            val intent = Intent("android.media.action.IMAGE_CAPTURE")
+            val cameraDir = File(cacheDir, "camera")
+            if (!cameraDir.exists() && !cameraDir.mkdirs()) {
+                throw IllegalStateException("Camera cache नहीं बन पाया")
+            }
+
+            val photoFile = File.createTempFile(
+                "SHAKTI_${System.currentTimeMillis()}_",
+                ".jpg",
+                cameraDir
+            )
+            val uri = FileProvider.getUriForFile(
+                this, "$packageName.fileprovider", photoFile
+            )
+            cameraPhotoUri = uri
+
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                clipData = android.content.ClipData.newUri(
+                    contentResolver, "SHAKTI camera photo", uri
+                )
+            }
+            if (intent.resolveActivity(packageManager) == null) {
+                throw IllegalStateException("Camera ऐप नहीं मिला")
+            }
             startActivityForResult(intent, CAMERA_CODE)
         } catch (e: Exception) {
-            addMessage("Camera उपलब्ध नहीं है।")
+            cameraPhotoUri = null
+            addMessage("Camera शुरू नहीं हो सका: ${e.message}")
+        }
+    }
+
+    private fun decodeCameraPhoto(uri: Uri): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        } ?: return null
+
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        var sample = 1
+        while (bounds.outWidth / sample > 2048 ||
+               bounds.outHeight / sample > 2048) {
+            sample *= 2
+        }
+
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        return contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
         }
     }
 
@@ -498,26 +552,34 @@ class MainActivity : Activity() {
     ) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (resultCode != RESULT_OK || data == null) return
+        if (resultCode != RESULT_OK) {
+            if (requestCode == CAMERA_CODE) cameraPhotoUri = null
+            return
+        }
 
         when (requestCode) {
             CAMERA_CODE -> {
-                val photo = data.extras?.get("data") as? Bitmap
+                val uri = cameraPhotoUri
+                val photo = uri?.let { decodeCameraPhoto(it) }
+                    ?: (data?.extras?.get("data") as? Bitmap)
+                cameraPhotoUri = null
+
                 if (photo != null) {
                     val image = ImageView(this).apply {
                         setImageBitmap(photo)
                         adjustViewBounds = true
+                        maxHeight = (240 * resources.displayMetrics.density).toInt()
                     }
                     chatLayout.addView(image)
-                    addMessage("फोटो प्राप्त हुई।")
+                    addMessage("फोटो प्राप्त हुई। Gemini विश्लेषण कर रहा है।")
                     analyzeImage(photo)
                 } else {
-                    addMessage("फोटो प्राप्त नहीं हुई।")
+                    addMessage("फोटो प्राप्त नहीं हुई। दोबारा कोशिश करें।")
                 }
             }
 
             VOICE_CODE -> {
-                val result = data.getStringArrayListExtra(
+                val result = data?.getStringArrayListExtra(
                     RecognizerIntent.EXTRA_RESULTS
                 )
                 val spoken = result?.firstOrNull()
@@ -529,14 +591,12 @@ class MainActivity : Activity() {
             }
 
             CONTACT_CODE -> {
-                val uri = data.data
+                val uri = data?.data
                 if (uri != null) {
                     contentResolver.query(
                         uri,
                         arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
-                        null,
-                        null,
-                        null
+                        null, null, null
                     )?.use { cursor ->
                         if (cursor.moveToFirst()) {
                             selectedPhone = cursor.getString(0) ?: ""
