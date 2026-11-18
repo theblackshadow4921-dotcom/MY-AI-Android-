@@ -114,10 +114,18 @@ def market_rates():
     state = request.args.get("state", "").strip() or None
     district = request.args.get("district", "").strip() or None
     market = request.args.get("market", "").strip() or None
+    commodity_offset = request.args.get("commodity_offset", default=0, type=int)
+    commodity_limit = request.args.get("commodity_limit", default=12, type=int)
 
     for value in (commodity, category, state, district, market):
         if value and len(value) > 100:
             return jsonify({"ok": False, "error": "खोज का नाम बहुत लंबा है।"}), 400
+
+    if commodity_offset < 0 or commodity_offset > 10000:
+        return jsonify({"ok": False, "error": "commodity_offset अमान्य है।"}), 400
+
+    if commodity_limit < 1 or commodity_limit > 15:
+        return jsonify({"ok": False, "error": "commodity_limit 1 से 15 के बीच होना चाहिए।"}), 400
 
     result = fetch_mandi_prices(
         commodity=commodity,
@@ -125,7 +133,9 @@ def market_rates():
         state=state,
         district=district,
         market=market,
-        limit=100
+        limit=100,
+        commodity_offset=commodity_offset,
+        commodity_limit=commodity_limit
     )
 
     if not result.get("ok"):
