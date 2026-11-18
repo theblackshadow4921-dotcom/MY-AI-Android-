@@ -6,9 +6,9 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 try:
-    from .market_rates import fetch_mandi_prices, normalize_commodity, commodity_list
+    from .market_rates import fetch_mandi_prices, normalize_commodity, commodity_list, redis_self_test
 except ImportError:
-    from market_rates import fetch_mandi_prices, normalize_commodity, commodity_list
+    from market_rates import fetch_mandi_prices, normalize_commodity, commodity_list, redis_self_test
 
 
 app = Flask(__name__)
@@ -232,6 +232,62 @@ def chat():
     if answer is None:
         return jsonify({"reply": "Gemini सेवा में समस्या हुई।"}), status
     return jsonify({"reply": answer})
+
+
+
+@app.route("/admin/maintenance", methods=["POST"])
+def admin_maintenance():
+    import hmac
+
+    expected = os.getenv("MARKET_ADMIN_TOKEN", "").strip()
+    supplied = request.headers.get("Authorization", "")
+    supplied = supplied[7:].strip() if supplied.startswith("Bearer ") else ""
+
+    if not expected or not supplied or not hmac.compare_digest(supplied, expected):
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    action = str(data.get("action", "check")).strip().lower()
+
+    if action == "check":
+        report = redis_self_test()
+        return jsonify(report), (200 if report.get("ok") else 503)
+
+    if action == "refresh":
+        category = str(data.get("category", "")).strip().lower()
+        allowed = {"vegetables", "fruits", "cereals", "pulses", "spices"}
+        if category not in allowed:
+            return jsonify({"ok": False, "error": "Invalid category"}), 400
+
+        try:
+            offset = int(data.get("commodity_offset", 0))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid offset"}), 400
+
+        if offset < 0 or offset > 10000:
+            return jsonify({"ok": False, "error": "Invalid offset"}), 400
+
+        result = fetch_mandi_prices(
+            category=category,
+            limit=100,
+            commodity_offset=offset,
+            commodity_limit=12,
+            force_refresh=True
+        )
+        if not result.get("ok"):
+            return jsonify({"ok": False, "category": category,
+                            "offset": offset, "error": result.get("error", "Refresh failed")}), 502
+
+        return jsonify({
+            "ok": True,
+            "category": category,
+            "offset": offset,
+            "count": result.get("count", 0),
+            "pagination": result.get("pagination"),
+            "cache_backend": result.get("cache_backend", "unknown")
+        })
+
+    return jsonify({"ok": False, "error": "Unknown action"}), 400
 
 
 @app.route("/analyze-image", methods=["POST"])

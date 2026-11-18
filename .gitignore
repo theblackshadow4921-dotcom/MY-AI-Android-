@@ -33,3 +33,7 @@ sherpa-onnx-v1.13.8.aar
 sherpa-classes.jar
 MainActivity.wake-backup.kt
 WakeWordService.empty-backup.kt
+
+# Private API credentials
+backend/.env
+.market_admin_token

@@ -1,0 +1,70 @@
+name: Daily AGMARKNET Cache Refresh
+
+on:
+  schedule:
+    - cron: "30 0 * * *" # 06:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-market-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate secrets
+        shell: bash
+        env:
+          ADMIN_TOKEN: ${{ secrets.MARKET_REFRESH_TOKEN }}
+        run: |
+          test -n "$ADMIN_TOKEN" || {
+            echo "Missing GitHub secret MARKET_REFRESH_TOKEN"
+            exit 1
+          }
+
+      - name: Check Redis and refresh all category batches
+        shell: bash
+        env:
+          ADMIN_TOKEN: ${{ secrets.MARKET_REFRESH_TOKEN }}
+          API_BASE: https://my-ai-gemini.onrender.com
+        run: |
+          set -euo pipefail
+          auth="Authorization: Bearer ${ADMIN_TOKEN}"
+
+          echo "Checking Redis..."
+          check=$(curl --fail --silent --show-error \
+            --max-time 90 -X POST \
+            -H "$auth" -H "Content-Type: application/json" \
+            -d '{"action":"check"}' \
+            "$API_BASE/admin/maintenance")
+          echo "$check"
+          echo "$check" | python3 -c \
+            'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("ok") else 1)'
+
+          for category in vegetables fruits cereals pulses spices; do
+            offset=0
+            echo "Refreshing category: $category"
+            while true; do
+              response=$(curl --fail --silent --show-error \
+                --max-time 120 -X POST \
+                -H "$auth" -H "Content-Type: application/json" \
+                -d "{\"action\":\"refresh\",\"category\":\"$category\",\"commodity_offset\":$offset}" \
+                "$API_BASE/admin/maintenance")
+
+              echo "$response"
+              next=$(echo "$response" | python3 -c \
+                'import json,sys; d=json.load(sys.stdin); assert d.get("ok"), d; p=d.get("pagination") or {}; print(p.get("next_commodity_offset") if p.get("has_more_commodities") else "DONE")')
+
+              if [ "$next" = "DONE" ] || [ "$next" = "None" ]; then
+                break
+              fi
+              offset="$next"
+            done
+          done
+
+          echo "DAILY MARKET REFRESH COMPLETED"

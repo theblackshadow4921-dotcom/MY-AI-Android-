@@ -431,3 +431,48 @@ def fetch_mandi_prices(commodity=None, state=None, district=None,
         result["cache_age_seconds"] = 0
 
     return result
+
+
+# Safe Redis diagnostics: never expose REDIS_URL or credentials.
+def redis_self_test():
+    report = {
+        "configured": bool(_REDIS_URL),
+        "client_ready": _REDIS_CLIENT is not None,
+        "ping": False,
+        "write": False,
+        "read": False,
+        "delete": False,
+        "memory_cache_cleared": False,
+        "persistence_roundtrip": False,
+    }
+    if _REDIS_CLIENT is None:
+        return report
+
+    test_key = "shakti:admin-test:" + hashlib.sha256(
+        str(time.time_ns()).encode()
+    ).hexdigest()
+
+    try:
+        report["ping"] = bool(_REDIS_CLIENT.ping())
+        value = secrets.token_urlsafe(18)
+        report["write"] = bool(_REDIS_CLIENT.setex(test_key, 60, value))
+        report["read"] = _REDIS_CLIENT.get(test_key) == value
+
+        with _MARKET_CACHE_LOCK:
+            _MARKET_CACHE.clear()
+        report["memory_cache_cleared"] = True
+
+        report["persistence_roundtrip"] = report["write"] and report["read"]
+    except Exception as exc:
+        report["error"] = type(exc).__name__
+    finally:
+        try:
+            report["delete"] = bool(_REDIS_CLIENT.delete(test_key))
+        except Exception as exc:
+            report["delete_error"] = type(exc).__name__
+
+    report["ok"] = all(
+        report[k] for k in ("ping", "write", "read", "delete",
+                            "memory_cache_cleared", "persistence_roundtrip")
+    )
+    return report
