@@ -33,6 +33,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import kotlin.concurrent.thread
+import java.util.concurrent.atomic.AtomicBoolean
 
 class WakeWordService : Service() {
 
@@ -61,6 +62,7 @@ class WakeWordService : Service() {
     @Volatile private var audioRecord: AudioRecord? = null
 
     private var worker: Thread? = null
+    private val recognitionRunning = AtomicBoolean(false)
     private var speechRecognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -155,7 +157,7 @@ class WakeWordService : Service() {
     }
 
     private fun startDetector() {
-        if (!serviceActive || detectorRunning) return
+        if (!serviceActive || detectorRunning || recognitionRunning.get()) return
 
         destroyRecognizer()
         detectorRunning = true
@@ -230,6 +232,10 @@ class WakeWordService : Service() {
                     buffer.size
                 )
 
+                if (count < 0) {
+                    throw IllegalStateException("Wake microphone read error: $count")
+                }
+
                 if (count > 0) {
                     val samples = FloatArray(count) {
                         buffer[it] / 32768.0f
@@ -302,8 +308,18 @@ class WakeWordService : Service() {
 
     private fun startRecognitionNow() {
         if (!serviceActive) return
+        if (!recognitionRunning.compareAndSet(false, true)) {
+            Log.w(TAG, "Recognition already running; duplicate request ignored")
+            return
+        }
+
         worker = Thread {
-            runOfflineHindiRecognition()
+            try {
+                runOfflineHindiRecognition()
+            } finally {
+                recognitionRunning.set(false)
+                Log.i(TAG, "Recognition worker released")
+            }
         }.also { it.start() }
     }
 
@@ -354,7 +370,10 @@ class WakeWordService : Service() {
 
             while (serviceActive && audio.size < maxSamples) {
                 val count = recorder.read(buffer, 0, buffer.size)
-                if (count <= 0) continue
+                if (count < 0) {
+                    throw IllegalStateException("Speech microphone read error: $count")
+                }
+                if (count == 0) continue
 
                 var energy = 0.0
                 for (i in 0 until count) {
