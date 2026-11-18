@@ -218,8 +218,8 @@ class WakeWordService : Service() {
             audioRecord = recorder
             recorder.startRecording()
 
-            Log.i(TAG, "Listening for HI SHAKTI")
-            sendStatus("SHAKTI चालू है। HI SHAKTI बोलें।")
+            Log.i(TAG, "Listening for SHAKTI")
+            sendStatus("SHAKTI चालू है। सिर्फ SHAKTI बोलें।")
 
             val buffer = ShortArray(1600)
 
@@ -353,7 +353,7 @@ class WakeWordService : Service() {
                             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
                                 "सर, माइक्रोफोन की अनुमति नहीं मिली।"
                             else ->
-                                "सर, आवाज़ पहचान में समस्या आई। फिर से HI SHAKTI बोलिए।"
+                                "सर, आवाज़ पहचान में समस्या आई। फिर से SHAKTI बोलिए।"
                         }
 
                         sendStatus("Voice error: $error")
@@ -721,7 +721,7 @@ class WakeWordService : Service() {
         return builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("SHAKTI AI - SHAKTI")
-            .setContentText("HI SHAKTI सुन रहा है")
+            .setContentText("SHAKTI सुन रहा है")
             .setOngoing(true)
             .addAction(
                 android.R.drawable.ic_media_pause,

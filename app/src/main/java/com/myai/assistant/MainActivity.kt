@@ -194,7 +194,7 @@ class MainActivity : Activity() {
             } else {
                 startService(serviceIntent)
             }
-            addMessage("SHAKTI सक्रिय हो रहा है। HI SHAKTI बोलें।")
+            addMessage("SHAKTI सक्रिय हो रहा है। सिर्फ SHAKTI बोलें।")
         } catch (e: Exception) {
             addMessage("Wake Word Service शुरू नहीं हो सकी: ${e.message}")
         }
