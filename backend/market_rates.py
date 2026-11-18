@@ -1,4 +1,7 @@
 import requests
+import json
+import os
+import hashlib
 import time
 import threading
 from copy import deepcopy
@@ -313,10 +316,29 @@ def _fetch_mandi_prices_uncached(commodity=None, state=None, district=None,
 
 
 
-# सफल AGMARKNET परिणाम 24 घंटे तक cache में रहेंगे।
+
+# 24-hour cache: Redis primary, process-memory fallback.
 _MARKET_CACHE = {}
 _MARKET_CACHE_LOCK = threading.Lock()
 _MARKET_CACHE_TTL = 24 * 60 * 60
+
+_REDIS_CLIENT = None
+_REDIS_URL = os.getenv("REDIS_URL", "").strip()
+
+if _REDIS_URL:
+    try:
+        import redis
+        _REDIS_CLIENT = redis.Redis.from_url(
+            _REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=3,
+            socket_timeout=3,
+            health_check_interval=30
+        )
+        _REDIS_CLIENT.ping()
+    except Exception:
+        _REDIS_CLIENT = None
+
 
 def fetch_mandi_prices(commodity=None, state=None, district=None,
                        market=None, limit=100, offset=0, category=None,
@@ -334,9 +356,27 @@ def fetch_mandi_prices(commodity=None, state=None, district=None,
         int(commodity_limit),
     )
 
+    key_hash = hashlib.sha256(
+        json.dumps(key, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    redis_key = "shakti:mandi:v1:" + key_hash
     now = time.time()
 
     if not force_refresh:
+        if _REDIS_CLIENT is not None:
+            try:
+                raw = _REDIS_CLIENT.get(redis_key)
+                if raw:
+                    cached = json.loads(raw)
+                    age = int(now - cached["saved_at"])
+                    if age < _MARKET_CACHE_TTL:
+                        result = deepcopy(cached["result"])
+                        result["cache"] = "REDIS_HIT"
+                        result["cache_age_seconds"] = max(0, age)
+                        return result
+            except Exception:
+                pass
+
         with _MARKET_CACHE_LOCK:
             cached = _MARKET_CACHE.get(key)
             if cached and now - cached["saved_at"] < _MARKET_CACHE_TTL:
@@ -358,11 +398,27 @@ def fetch_mandi_prices(commodity=None, state=None, district=None,
     )
 
     if result.get("ok"):
+        saved = {
+            "saved_at": now,
+            "result": deepcopy(result),
+        }
+
         with _MARKET_CACHE_LOCK:
-            _MARKET_CACHE[key] = {
-                "saved_at": now,
-                "result": deepcopy(result),
-            }
+            _MARKET_CACHE[key] = saved
+
+        if _REDIS_CLIENT is not None:
+            try:
+                _REDIS_CLIENT.setex(
+                    redis_key,
+                    _MARKET_CACHE_TTL,
+                    json.dumps(saved, ensure_ascii=False)
+                )
+                result["cache_backend"] = "redis"
+            except Exception:
+                result["cache_backend"] = "memory_fallback"
+        else:
+            result["cache_backend"] = "memory"
+
         result["cache"] = "REFRESHED"
         result["cache_age_seconds"] = 0
 
