@@ -46,6 +46,11 @@ def ask_gemini(payload, use_search=False):
         )
 
         if not response.ok:
+            app.logger.error(
+                "Gemini API HTTP %s: %s",
+                response.status_code,
+                response.text[:2000]
+            )
             return None, 502
 
         result = response.json()
@@ -69,7 +74,8 @@ def ask_gemini(payload, use_search=False):
 
         return answer, 200
 
-    except (requests.RequestException, KeyError, IndexError, ValueError):
+    except (requests.RequestException, KeyError, IndexError, ValueError) as exc:
+        app.logger.exception("Gemini request failed: %s", exc)
         return None, 503
 
 
