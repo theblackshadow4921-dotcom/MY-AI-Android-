@@ -324,6 +324,9 @@ _MARKET_CACHE_TTL = 24 * 60 * 60
 
 _REDIS_CLIENT = None
 _REDIS_URL = os.getenv("REDIS_URL", "").strip()
+_REDIS_CLIENT = None
+
+print("[REDIS] URL configured:", bool(_REDIS_URL))
 
 if _REDIS_URL:
     try:
@@ -336,8 +339,12 @@ if _REDIS_URL:
             health_check_interval=30
         )
         _REDIS_CLIENT.ping()
-    except Exception:
+        print("[REDIS] Connection: SUCCESS")
+    except Exception as exc:
         _REDIS_CLIENT = None
+        print("[REDIS] Connection: FAILED -", type(exc).__name__)
+else:
+    print("[REDIS] Connection: SKIPPED - URL missing")
 
 
 def fetch_mandi_prices(commodity=None, state=None, district=None,
