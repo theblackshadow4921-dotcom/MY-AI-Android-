@@ -748,25 +748,36 @@ class MainActivity : Activity() {
     }
 
     private fun decodeCameraPhoto(uri: Uri): Bitmap? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, bounds)
-        } ?: return null
+        return try {
+            val bounds = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
 
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            } ?: return null
 
-        var sample = 1
-        while (bounds.outWidth / sample > 2048 ||
-               bounds.outHeight / sample > 2048) {
-            sample *= 2
-        }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                return null
+            }
 
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.RGB_565
-        }
-        return contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, options)
+            var sample = 1
+            while (bounds.outWidth / sample > 2048 ||
+                   bounds.outHeight / sample > 2048) {
+                sample *= 2
+            }
+
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+
+            contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, options)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SHAKTI_CAMERA", "Photo decode failed", e)
+            null
         }
     }
 
@@ -884,6 +895,7 @@ class MainActivity : Activity() {
             CAMERA_CODE -> {
                 val uri = cameraPhotoUri
                 val photo = uri?.let { decodeCameraPhoto(it) }
+                    ?: data?.data?.let { decodeCameraPhoto(it) }
                     ?: (data?.extras?.get("data") as? Bitmap)
                 cameraPhotoUri = null
 
