@@ -86,61 +86,319 @@ class MainActivity : Activity() {
             }
         }
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(10, 18, 38))
-            setPadding(16, 16, 16, 16)
+
+        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density).toInt()
+
+        val blue = Color.rgb(37, 99, 235)
+        val navy = Color.rgb(20, 43, 78)
+        val muted = Color.rgb(115, 132, 155)
+        val white = Color.WHITE
+
+        fun rounded(color: Int, radius: Int = 18): android.graphics.drawable.GradientDrawable {
+            return android.graphics.drawable.GradientDrawable().apply {
+                setColor(color)
+                cornerRadius = dp(radius).toFloat()
+            }
         }
 
-        val title = TextView(this).apply {
-            text = "SHAKTI AI ASSISTANT"
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.rgb(245, 248, 253))
+            setPadding(dp(14), dp(10), dp(14), dp(8))
+        }
+
+        // PREMIUM HEADER
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(8), dp(4), dp(12))
+        }
+
+        val menu = TextView(this).apply {
+            text = "☰"
             textSize = 25f
+            setTextColor(navy)
             gravity = Gravity.CENTER
+            setPadding(dp(8), dp(4), dp(12), dp(4))
+            setOnClickListener {
+                android.widget.Toast.makeText(
+                    this@MainActivity, "SHAKTI AI Menu",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        header.addView(menu)
+
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        brand.addView(TextView(this).apply {
+            text = "SHAKTI AI"
+            textSize = 21f
+            setTextColor(navy)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        })
+
+        brand.addView(TextView(this).apply {
+            text = "PERSONAL AI ASSISTANT"
+            textSize = 9f
+            letterSpacing = 1.2f
+            setTextColor(muted)
+        })
+
+        header.addView(
+            brand,
+            LinearLayout.LayoutParams(0, dp(48), 1f)
+        )
+
+        val online = TextView(this).apply {
+            text = "● Online"
+            textSize = 11f
+            setTextColor(Color.rgb(22, 150, 91))
+            setPadding(dp(9), dp(7), dp(9), dp(7))
+            background = rounded(Color.rgb(226, 249, 238), 30)
+        }
+        header.addView(online)
+        root.addView(header)
+
+        // MAIN SCROLL CONTENT
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(4), 0, dp(12))
+        }
+
+        // HERO / ROBOT PANEL
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(16), dp(20), dp(16), dp(20))
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(
+                    Color.rgb(30, 91, 190),
+                    Color.rgb(75, 105, 220),
+                    Color.rgb(104, 91, 205)
+                )
+            ).apply {
+                cornerRadius = dp(25).toFloat()
+            }
+        }
+
+        val robot = TextView(this).apply {
+            text = "🤖"
+            textSize = 67f
+            gravity = Gravity.CENTER
+            background = rounded(Color.rgb(255, 255, 255), 60)
+        }
+        hero.addView(
+            robot,
+            LinearLayout.LayoutParams(dp(112), dp(112))
+        )
+
+        hero.addView(TextView(this).apply {
+            text = "SHAKTI AI"
+            textSize = 27f
+            setTextColor(white)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, dp(2))
+        })
+
+        hero.addView(TextView(this).apply {
+            text = "सोच से समाधान तक..."
+            textSize = 15f
             setTextColor(Color.WHITE)
-            setPadding(10, 18, 10, 18)
+            gravity = Gravity.CENTER
+        })
+
+        hero.addView(TextView(this).apply {
+            text = "मुझे Divyansh Sir ने बनाया है।"
+            textSize = 12f
+            setTextColor(Color.rgb(225, 235, 255))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(9), 0, 0)
+        })
+
+        content.addView(
+            hero,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(245)
+            )
+        )
+
+        // FEATURE SECTION
+        val featureHeading = TextView(this).apply {
+            text = "आपके AI Tools"
+            textSize = 19f
+            setTextColor(navy)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(dp(3), dp(19), 0, dp(8))
+        }
+        content.addView(featureHeading)
+
+        fun featureCard(
+            emoji: String,
+            heading: String,
+            detail: String,
+            action: () -> Unit
+        ): LinearLayout {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(10), dp(8), dp(10))
+                background = rounded(white, 18)
+                elevation = dp(2).toFloat()
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+            }
+
+            card.addView(TextView(this).apply {
+                text = emoji
+                textSize = 25f
+            })
+
+            card.addView(TextView(this).apply {
+                text = heading
+                textSize = 13f
+                setTextColor(navy)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setPadding(0, dp(5), 0, dp(2))
+            })
+
+            card.addView(TextView(this).apply {
+                text = detail
+                textSize = 10f
+                setTextColor(muted)
+            })
+
+            return card
+        }
+
+        fun addFeatureRow(
+            first: LinearLayout,
+            second: LinearLayout? = null
+        ) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+
+            val lp1 = LinearLayout.LayoutParams(0, dp(112), 1f)
+            lp1.setMargins(dp(3), dp(4), dp(5), dp(5))
+            row.addView(first, lp1)
+
+            if (second != null) {
+                val lp2 = LinearLayout.LayoutParams(0, dp(112), 1f)
+                lp2.setMargins(dp(5), dp(4), dp(3), dp(5))
+                row.addView(second, lp2)
+            } else {
+                row.addView(
+                    View(this),
+                    LinearLayout.LayoutParams(0, dp(112), 1f)
+                )
+            }
+
+            content.addView(row)
+        }
+
+        addFeatureRow(
+            featureCard("📷", "Camera", "Photo analysis") { openCamera() },
+            featureCard("🎤", "Voice Assistant", "बोलकर पूछें") { openVoice() }
+        )
+
+        addFeatureRow(
+            featureCard("📍", "My Location", "अपनी लोकेशन") { getLocation() },
+            featureCard("👤", "Select Contact", "Contact चुनें") { openContacts() }
+        )
+
+        addFeatureRow(
+            featureCard("💬", "Send SMS", "Message भेजें") { sendSMS() }
+        )
+
+        // CHAT SECTION
+        content.addView(TextView(this).apply {
+            text = "SHAKTI से बातचीत"
+            textSize = 19f
+            setTextColor(navy)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(dp(3), dp(18), 0, dp(8))
+        })
+
+        val chatCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = rounded(white, 20)
+            elevation = dp(2).toFloat()
         }
 
         chatLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        val scroll = ScrollView(this)
-        scroll.addView(chatLayout)
+        chatCard.addView(
+            chatLayout,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
 
-        val features = LinearLayout(this).apply {
+        content.addView(
+            chatCard,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(dp(2), 0, dp(2), dp(10))
+            }
+        )
+
+        scroll.addView(content)
+        root.addView(
+            scroll,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
+            )
+        )
+
+        // MESSAGE INPUT
+        val bottom = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-
-        addFeatureButton(features, "📷", "Camera") {
-            openCamera()
-        }
-
-        addFeatureButton(features, "🎤", "Voice Assistant") {
-            openVoice()
-        }
-
-        addFeatureButton(features, "📍", "My Location") {
-            getLocation()
-        }
-
-        addFeatureButton(features, "👤", "Select Contact") {
-            openContacts()
-        }
-
-        addFeatureButton(features, "💬", "Send SMS") {
-            sendSMS()
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(5), dp(7), dp(5), dp(7))
+            background = rounded(white, 22)
+            elevation = dp(3).toFloat()
         }
 
         input = EditText(this).apply {
-            hint = "अपना सवाल लिखें..."
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.LTGRAY)
+            hint = "SHAKTI से कुछ पूछें..."
+            textSize = 14f
+            setTextColor(navy)
+            setHintTextColor(muted)
             setSingleLine(true)
+            setPadding(dp(12), dp(10), dp(8), dp(10))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.rgb(247, 249, 253))
+                cornerRadius = dp(16).toFloat()
+                setStroke(dp(1), Color.rgb(225, 232, 243))
+            }
         }
 
         val send = Button(this).apply {
             text = "Send"
+            textSize = 13f
+            isAllCaps = false
+            setTextColor(white)
+            backgroundTintList =
+                android.content.res.ColorStateList.valueOf(blue)
+
             setOnClickListener {
                 val message = input.text.toString().trim()
                 if (message.isNotEmpty()) {
@@ -151,29 +409,89 @@ class MainActivity : Activity() {
             }
         }
 
-        root.addView(title)
-
-        root.addView(
-            scroll,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-            )
-        )
-
-        root.addView(features)
-
-        val bottom = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-
         bottom.addView(
             input,
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            LinearLayout.LayoutParams(0, dp(48), 1f)
         )
-        bottom.addView(send)
+        bottom.addView(
+            send,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)
+            ).apply {
+                setMargins(dp(7), 0, 0, 0)
+            }
+        )
 
         root.addView(bottom)
+
+        // BOTTOM NAVIGATION
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(7), 0, dp(2))
+        }
+
+        fun navItem(
+            icon: String,
+            label: String,
+            action: () -> Unit
+        ): TextView {
+            return TextView(this).apply {
+                text = "$icon\n$label"
+                textSize = 10f
+                gravity = Gravity.CENTER
+                setTextColor(blue)
+                setPadding(dp(4), dp(4), dp(4), dp(4))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { action() }
+            }
+        }
+
+        nav.addView(
+            navItem("⌂", "Home") {
+                scroll.smoothScrollTo(0, 0)
+            },
+            LinearLayout.LayoutParams(0, dp(48), 1f)
+        )
+
+        nav.addView(
+            navItem("◷", "History") {
+                addMessage("आपकी बातचीत इसी Chat Section में दिखाई देती है।")
+                scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+            },
+            LinearLayout.LayoutParams(0, dp(48), 1f)
+        )
+
+        nav.addView(
+            navItem("✦", "Premium") {
+                android.widget.Toast.makeText(
+                    this@MainActivity,
+                    "Premium Plans जल्द उपलब्ध होंगे।",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            },
+            LinearLayout.LayoutParams(0, dp(48), 1f)
+        )
+
+        nav.addView(
+            navItem("ⓘ", "About") {
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("SHAKTI AI")
+                    .setMessage(
+                        "आपका Personal AI Assistant\n\n" +
+                        "सोच से समाधान तक...\n" +
+                        "Created by Divyansh Sir"
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            },
+            LinearLayout.LayoutParams(0, dp(48), 1f)
+        )
+
+        root.addView(nav)
         setContentView(root)
+
 
         addMessage("नमस्ते! SHAKTI AI में आपका स्वागत है।")
         startWakeWordIfPermitted()
@@ -357,6 +675,10 @@ class MainActivity : Activity() {
         val button = Button(this).apply {
             text = icon
             textSize = 20f
+            setTextColor(Color.rgb(37, 99, 235))
+            backgroundTintList = android.content.res.ColorStateList.valueOf(
+                Color.WHITE
+            )
             contentDescription = description
             isAllCaps = false
             setPadding(0, 0, 0, 0)
@@ -648,8 +970,13 @@ class MainActivity : Activity() {
         val text = TextView(this).apply {
             this.text = message
             textSize = 16f
-            setTextColor(Color.WHITE)
-            setPadding(12, 12, 12, 12)
+            setTextColor(Color.rgb(35, 52, 78))
+            setPadding(16, 13, 16, 13)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = 18f * resources.displayMetrics.density
+                setStroke(1, Color.rgb(225, 233, 244))
+            }
         }
         chatLayout.addView(text)
     }
