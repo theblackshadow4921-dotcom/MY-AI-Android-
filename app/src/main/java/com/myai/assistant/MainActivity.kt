@@ -1,5 +1,8 @@
 package com.myai.assistant
 import java.io.File
+import android.app.AlertDialog
+import android.speech.RecognitionListener
+import android.speech.SpeechRecognizer
 import androidx.core.content.FileProvider
 import android.provider.MediaStore
 import android.graphics.BitmapFactory
@@ -57,6 +60,8 @@ class MainActivity : Activity() {
     private var tts: TextToSpeech? = null
     private var selectedPhone = ""
     private var cameraPhotoUri: Uri? = null
+    private var cameraPhotoPath: String? = null
+    private var speechRecognizer: SpeechRecognizer? = null
 
     companion object {
         const val CAMERA_CODE = 101
@@ -74,6 +79,8 @@ class MainActivity : Activity() {
         cameraPhotoUri = savedInstanceState?.getString("pending_camera_uri")
             ?.let { Uri.parse(it) }
             ?: cameraPrefs.getString("pending_camera_uri", null)?.let { Uri.parse(it) }
+        cameraPhotoPath = savedInstanceState?.getString("pending_camera_path")
+            ?: cameraPrefs.getString("pending_camera_path", null)
 
         val wakeFilter = IntentFilter().apply {
             addAction(WakeWordService.ACTION_STATUS)
@@ -725,17 +732,19 @@ class MainActivity : Activity() {
             }
 
             val photoFile = File.createTempFile(
-                "SHAKTI_${System.currentTimeMillis()}_",
-                ".jpg",
-                cameraDir
+                "SHAKTI_${System.currentTimeMillis()}_", ".jpg", cameraDir
             )
             val uri = FileProvider.getUriForFile(
                 this, "$packageName.fileprovider", photoFile
             )
+
             cameraPhotoUri = uri
+            cameraPhotoPath = photoFile.absolutePath
+
             getSharedPreferences("shakti_camera", MODE_PRIVATE)
                 .edit()
                 .putString("pending_camera_uri", uri.toString())
+                .putString("pending_camera_path", photoFile.absolutePath)
                 .commit()
 
             val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
@@ -746,13 +755,63 @@ class MainActivity : Activity() {
                     contentResolver, "SHAKTI camera photo", uri
                 )
             }
-            if (intent.resolveActivity(packageManager) == null) {
+
+            val handlers = packageManager.queryIntentActivities(
+                intent, PackageManager.MATCH_DEFAULT_ONLY
+            )
+            if (handlers.isEmpty()) {
                 throw IllegalStateException("Camera ऐप नहीं मिला")
             }
+
+            handlers.forEach {
+                grantUriPermission(
+                    it.activityInfo.packageName,
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+
             startActivityForResult(intent, CAMERA_CODE)
         } catch (e: Exception) {
             cameraPhotoUri = null
+            cameraPhotoPath = null
             addMessage("Camera शुरू नहीं हो सका: ${e.message}")
+        }
+    }
+
+        private fun decodeCameraPhotoFile(path: String): Bitmap? {
+        return try {
+            val file = File(path)
+            if (!file.exists() || file.length() <= 0L) {
+                android.util.Log.e("SHAKTI_CAMERA", "Photo file missing or empty: $path")
+                return null
+            }
+
+            val bounds = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeFile(path, bounds)
+
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                android.util.Log.e("SHAKTI_CAMERA", "Invalid image dimensions")
+                return null
+            }
+
+            var sample = 1
+            while (bounds.outWidth / sample > 2048 ||
+                   bounds.outHeight / sample > 2048) {
+                sample *= 2
+            }
+
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            BitmapFactory.decodeFile(path, options)
+        } catch (e: Exception) {
+            android.util.Log.e("SHAKTI_CAMERA", "File decode failed", e)
+            null
         }
     }
 
@@ -801,21 +860,119 @@ class MainActivity : Activity() {
             return
         }
 
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            addMessage("इस फोन में Speech Recognition सेवा उपलब्ध नहीं है।")
+            return
+        }
+
         try {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            intent.putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-            )
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
-            intent.putExtra(RecognizerIntent.EXTRA_PROMPT, "बोलिए...")
-            startActivityForResult(intent, VOICE_CODE)
+            speechRecognizer?.destroy()
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+
+            val status = TextView(this).apply {
+                text = "🎙️  SHAKTI सुन रही है...\n\nअब हिंदी में बोलिए।"
+                textSize = 18f
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                setPadding(28, 36, 28, 36)
+            }
+
+            val dialog = AlertDialog.Builder(this)
+                .setTitle("SHAKTI AI")
+                .setView(status)
+                .setNegativeButton("रद्द करें") { _, _ ->
+                    speechRecognizer?.cancel()
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
+                }
+                .create()
+
+            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    status.text = "🎙️  SHAKTI सुन रही है...\n\nबोलना शुरू कीजिए।"
+                }
+
+                override fun onBeginningOfSpeech() {
+                    status.text = "🎙️  आपकी आवाज़ सुन रही हूँ..."
+                }
+
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+
+                override fun onEndOfSpeech() {
+                    status.text = "⌛ आपकी बात समझ रही हूँ..."
+                }
+
+                override fun onError(error: Int) {
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
+                    if (dialog.isShowing) dialog.dismiss()
+                    addMessage("आवाज़ समझ नहीं आई। दोबारा Voice Assistant दबाएँ।")
+                }
+
+                override fun onResults(results: Bundle?) {
+                    val spoken = results?.getStringArrayList(
+                        SpeechRecognizer.RESULTS_RECOGNITION
+                    )?.firstOrNull()
+
+                    speechRecognizer?.destroy()
+                    speechRecognizer = null
+                    if (dialog.isShowing) dialog.dismiss()
+
+                    if (!spoken.isNullOrBlank()) {
+                        input.setText(spoken)
+                        addMessage("आपने कहा: $spoken")
+                        askGemini(spoken)
+                    } else {
+                        addMessage("आपकी आवाज़ समझ नहीं आई।")
+                    }
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults?.getStringArrayList(
+                        SpeechRecognizer.RESULTS_RECOGNITION
+                    )?.firstOrNull()
+                    if (!partial.isNullOrBlank()) {
+                        status.text = "🎙️  $partial"
+                    }
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+
+            dialog.setOnDismissListener {
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+                speechRecognizer = null
+            }
+            dialog.show()
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                    1500L
+                )
+                putExtra(
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                    1000L
+                )
+            }
+            speechRecognizer?.startListening(intent)
         } catch (e: Exception) {
-            addMessage("Voice Recognition उपलब्ध नहीं है।")
+            speechRecognizer?.destroy()
+            speechRecognizer = null
+            addMessage("Voice Assistant शुरू नहीं हो सका: ${e.message}")
         }
     }
 
-    private fun getLocation() {
+        private fun getLocation() {
         val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
 
@@ -892,6 +1049,9 @@ class MainActivity : Activity() {
         cameraPhotoUri?.let {
             outState.putString("pending_camera_uri", it.toString())
         }
+        cameraPhotoPath?.let {
+            outState.putString("pending_camera_path", it)
+        }
         super.onSaveInstanceState(outState)
     }
 
@@ -905,8 +1065,12 @@ class MainActivity : Activity() {
         if (resultCode != RESULT_OK) {
             if (requestCode == CAMERA_CODE) {
                 cameraPhotoUri = null
+                cameraPhotoPath = null
                 getSharedPreferences("shakti_camera", MODE_PRIVATE)
-                    .edit().remove("pending_camera_uri").apply()
+                    .edit()
+                    .remove("pending_camera_uri")
+                    .remove("pending_camera_path")
+                    .apply()
             }
             return
         }
@@ -916,12 +1080,21 @@ class MainActivity : Activity() {
                 val uri = cameraPhotoUri
                     ?: getSharedPreferences("shakti_camera", MODE_PRIVATE)
                         .getString("pending_camera_uri", null)?.let { Uri.parse(it) }
-                val photo = uri?.let { decodeCameraPhoto(it) }
+                val photoPath = cameraPhotoPath
+                    ?: getSharedPreferences("shakti_camera", MODE_PRIVATE)
+                        .getString("pending_camera_path", null)
+                val photo = photoPath?.let { decodeCameraPhotoFile(it) }
+                    ?: uri?.let { decodeCameraPhoto(it) }
                     ?: data?.data?.let { decodeCameraPhoto(it) }
                     ?: (data?.extras?.get("data") as? Bitmap)
+
                 cameraPhotoUri = null
+                cameraPhotoPath = null
                 getSharedPreferences("shakti_camera", MODE_PRIVATE)
-                    .edit().remove("pending_camera_uri").apply()
+                    .edit()
+                    .remove("pending_camera_uri")
+                    .remove("pending_camera_path")
+                    .apply()
 
                 if (photo != null) {
                     val image = ImageView(this).apply {
@@ -1023,6 +1196,10 @@ class MainActivity : Activity() {
             unregisterReceiver(wakeWordReceiver)
         } catch (_: Exception) {
         }
+
+        speechRecognizer?.cancel()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
 
         tts?.stop()
         tts?.shutdown()
