@@ -904,10 +904,27 @@ class MainActivity : Activity() {
                 }
 
                 override fun onError(error: Int) {
+                    val errorName = when (error) {
+                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "NETWORK_TIMEOUT"
+                        SpeechRecognizer.ERROR_NETWORK -> "NETWORK"
+                        SpeechRecognizer.ERROR_AUDIO -> "AUDIO"
+                        SpeechRecognizer.ERROR_SERVER -> "SERVER"
+                        SpeechRecognizer.ERROR_CLIENT -> "CLIENT"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "SPEECH_TIMEOUT"
+                        SpeechRecognizer.ERROR_NO_MATCH -> "NO_MATCH"
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "RECOGNIZER_BUSY"
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "MIC_PERMISSION"
+                        SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "TOO_MANY_REQUESTS"
+                        SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "SERVER_DISCONNECTED"
+                        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "LANGUAGE_NOT_SUPPORTED"
+                        SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "LANGUAGE_UNAVAILABLE"
+                        else -> "UNKNOWN"
+                    }
+                    android.util.Log.e("SHAKTI_VOICE", "Speech error: $error ($errorName)")
                     speechRecognizer?.destroy()
                     speechRecognizer = null
                     if (dialog.isShowing) dialog.dismiss()
-                    addMessage("आवाज़ समझ नहीं आई। दोबारा Voice Assistant दबाएँ।")
+                    addMessage("SHAKTI Voice Error: $error ($errorName)")
                 }
 
                 override fun onResults(results: Bundle?) {
