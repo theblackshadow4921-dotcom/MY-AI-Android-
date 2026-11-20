@@ -924,11 +924,20 @@ class MainActivity : Activity() {
                         SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "LANGUAGE_UNAVAILABLE"
                         else -> "UNKNOWN"
                     }
-                    android.util.Log.e("SHAKTI_VOICE", "Speech error: $error ($errorName)")
+                    android.util.Log.e("SHAKTI_VOICE", "Speech error: $error ($errorName), partial=$lastPartialText")
                     speechRecognizer?.destroy()
                     speechRecognizer = null
                     if (dialog.isShowing) dialog.dismiss()
-                    addMessage("SHAKTI Voice Error: $error ($errorName)")
+
+                    if (error == SpeechRecognizer.ERROR_NO_MATCH &&
+                        lastPartialText.isNotBlank()
+                    ) {
+                        input.setText(lastPartialText)
+                        addMessage("आपने कहा: $lastPartialText")
+                        askGemini(lastPartialText)
+                    } else {
+                        addMessage("SHAKTI Voice Error: $error ($errorName). कृपया थोड़ा साफ और धीरे बोलकर दोबारा कोशिश करें।")
+                    }
                 }
 
                 override fun onResults(results: Bundle?) {
@@ -981,7 +990,7 @@ class MainActivity : Activity() {
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
                 )
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")\n                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 putExtra(
