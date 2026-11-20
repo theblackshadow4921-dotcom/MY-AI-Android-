@@ -34,6 +34,9 @@ import java.util.Locale
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import android.os.Handler
+import android.os.Looper
+import android.location.LocationListener
 import kotlin.concurrent.thread
 
 class MainActivity : Activity() {
@@ -725,69 +728,145 @@ class MainActivity : Activity() {
 
         try {
             val manager = getSystemService(LOCATION_SERVICE) as LocationManager
-            var bestLocation: android.location.Location? = null
 
+            var lastLocation: android.location.Location? = null
             for (provider in manager.getProviders(true)) {
                 val candidate = manager.getLastKnownLocation(provider)
                 if (candidate != null &&
-                    (bestLocation == null ||
-                     candidate.time > bestLocation.time)
+                    (lastLocation == null || candidate.time > lastLocation.time)
                 ) {
-                    bestLocation = candidate
+                    lastLocation = candidate
                 }
             }
 
-            val location = bestLocation
-            if (location == null) {
-                val message = "सर, अभी फोन की लोकेशन उपलब्ध नहीं है। GPS चालू करके दोबारा पूछिए।"
-                addMessage(message)
-                tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
+            if (lastLocation != null) {
+                addMessage("SHAKTI: आपके स्थान का मौसम प्राप्त कर रहा हूँ...")
+                loadWeatherForLocation(lastLocation)
                 return
             }
 
-            addMessage("SHAKTI: आपके स्थान का मौसम प्राप्त कर रहा हूँ...")
+            addMessage("SHAKTI: नई GPS लोकेशन प्राप्त कर रही हूँ...")
 
-            thread {
-                var connection: HttpURLConnection? = null
+            val handler = Handler(Looper.getMainLooper())
+            var completed = false
+            var registered = false
 
-                val reply = try {
-                    val url = Uri.parse(
-                        "https://my-ai-gemini.onrender.com/weather"
-                    ).buildUpon()
-                        .appendQueryParameter("latitude", location.latitude.toString())
-                        .appendQueryParameter("longitude", location.longitude.toString())
-                        .build().toString()
+            lateinit var listener: LocationListener
 
-                    connection = URL(url).openConnection() as HttpURLConnection
-                    connection.requestMethod = "GET"
-                    connection.connectTimeout = 15000
-                    connection.readTimeout = 30000
-
-                    val stream = if (connection.responseCode in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream
-                    }
-
-                    val response = stream.bufferedReader().use { it.readText() }
-                    JSONObject(response).optString(
-                        "reply", "सर, मौसम की जानकारी नहीं मिल पाई।"
-                    )
-                } catch (e: Exception) {
-                    "सर, मौसम सर्वर से कनेक्शन नहीं हो पाया। थोड़ी देर बाद कोशिश करें।"
-                } finally {
-                    connection?.disconnect()
-                }
-
-                runOnUiThread {
-                    addMessage("SHAKTI AI: $reply")
-                    tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
+            val timeout = Runnable {
+                if (!completed) {
+                    completed = true
+                    try {
+                        manager.removeUpdates(listener)
+                    } catch (_: Exception) {}
+                    val message = "सर, अभी GPS लोकेशन नहीं मिल पाई। फोन की Location चालू करके खुले स्थान पर दोबारा कोशिश करें।"
+                    addMessage(message)
+                    tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
                 }
             }
+
+            listener = object : LocationListener {
+                override fun onLocationChanged(location: android.location.Location) {
+                    if (completed) return
+                    completed = true
+                    handler.removeCallbacks(timeout)
+                    try {
+                        manager.removeUpdates(this)
+                    } catch (_: Exception) {}
+                    addMessage("SHAKTI: लोकेशन मिल गई, मौसम देख रही हूँ...")
+                    loadWeatherForLocation(location)
+                }
+
+                override fun onProviderEnabled(provider: String) {}
+
+                override fun onProviderDisabled(provider: String) {}
+
+                @Deprecated("Deprecated in Android")
+                override fun onStatusChanged(
+                    provider: String?,
+                    status: Int,
+                    extras: Bundle?
+                ) {}
+            }
+
+            for (provider in manager.getProviders(true)) {
+                try {
+                    manager.requestLocationUpdates(
+                        provider,
+                        0L,
+                        0f,
+                        listener,
+                        Looper.getMainLooper()
+                    )
+                    registered = true
+                } catch (_: Exception) {}
+            }
+
+            if (registered) {
+                handler.postDelayed(timeout, 25000L)
+            } else {
+                completed = true
+                val message = "सर, फोन की Location या GPS बंद है। कृपया Location चालू करके दोबारा पूछें।"
+                addMessage(message)
+                tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
+            }
+
         } catch (e: SecurityException) {
-            addMessage("सर, लोकेशन की अनुमति नहीं मिली।")
+            val message = "सर, लोकेशन की अनुमति नहीं मिली।"
+            addMessage(message)
+            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
         } catch (e: Exception) {
-            addMessage("सर, लोकेशन प्राप्त करने में समस्या हुई।")
+            val message = "सर, लोकेशन प्राप्त करने में समस्या हुई।"
+            addMessage(message)
+            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
+        }
+    }
+
+    private fun loadWeatherForLocation(location: android.location.Location) {
+        thread {
+            var connection: HttpURLConnection? = null
+
+            val reply = try {
+                val url = Uri.parse(
+                    "https://my-ai-gemini.onrender.com/weather"
+                ).buildUpon()
+                    .appendQueryParameter("latitude", location.latitude.toString())
+                    .appendQueryParameter("longitude", location.longitude.toString())
+                    .build().toString()
+
+                connection = URL(url).openConnection() as HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 30000
+
+                val responseCode = connection.responseCode
+                val stream = if (responseCode in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+
+                val response = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                val json = JSONObject(response)
+
+                if (responseCode in 200..299) {
+                    json.optString("reply", "सर, मौसम की जानकारी नहीं मिल पाई।")
+                } else {
+                    json.optString(
+                        "reply",
+                        json.optString("error", "सर, मौसम सर्वर से जानकारी नहीं मिल पाई।")
+                    )
+                }
+            } catch (e: Exception) {
+                "सर, मौसम सर्वर से कनेक्शन नहीं हो पाया। थोड़ी देर बाद कोशिश करें।"
+            } finally {
+                connection?.disconnect()
+            }
+
+            runOnUiThread {
+                addMessage("SHAKTI AI: $reply")
+                tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
+            }
         }
     }
 
