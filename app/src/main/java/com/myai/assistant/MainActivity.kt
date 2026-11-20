@@ -887,12 +887,16 @@ class MainActivity : Activity() {
                 }
                 .create()
 
+            var lastPartialText = ""
+
             speechRecognizer?.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
+                    android.util.Log.d("SHAKTI_VOICE", "Ready for speech")
                     status.text = "🎙️  SHAKTI सुन रही है...\n\nबोलना शुरू कीजिए।"
                 }
 
                 override fun onBeginningOfSpeech() {
+                    android.util.Log.d("SHAKTI_VOICE", "Beginning of speech detected")
                     status.text = "🎙️  आपकी आवाज़ सुन रही हूँ..."
                 }
 
@@ -928,9 +932,11 @@ class MainActivity : Activity() {
                 }
 
                 override fun onResults(results: Bundle?) {
-                    val spoken = results?.getStringArrayList(
+                    val recognizedList = results?.getStringArrayList(
                         SpeechRecognizer.RESULTS_RECOGNITION
-                    )?.firstOrNull()
+                    )
+                    val spoken = recognizedList?.firstOrNull()
+                    android.util.Log.d("SHAKTI_VOICE", "Final=$recognizedList partial=$lastPartialText keys=${results?.keySet()}")
 
                     speechRecognizer?.destroy()
                     speechRecognizer = null
@@ -941,7 +947,9 @@ class MainActivity : Activity() {
                         addMessage("आपने कहा: $spoken")
                         askGemini(spoken)
                     } else {
-                        addMessage("आपकी आवाज़ समझ नहीं आई।")
+                        val detail = if (lastPartialText.isNotBlank()) { "शुरुआती पहचान: $lastPartialText" } else { "कोई शुरुआती टेक्स्ट भी नहीं मिला।" }
+                        android.util.Log.e("SHAKTI_VOICE", "EMPTY_RESULTS: $detail")
+                        addMessage("आवाज़ का अंतिम टेक्स्ट खाली मिला। $detail")
                     }
                 }
 
@@ -950,7 +958,11 @@ class MainActivity : Activity() {
                         SpeechRecognizer.RESULTS_RECOGNITION
                     )?.firstOrNull()
                     if (!partial.isNullOrBlank()) {
+                        lastPartialText = partial
+                        android.util.Log.d("SHAKTI_VOICE", "Partial result: $partial")
                         status.text = "🎙️  $partial"
+                    } else {
+                        android.util.Log.d("SHAKTI_VOICE", "Partial result is empty")
                     }
                 }
 
