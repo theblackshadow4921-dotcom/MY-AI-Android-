@@ -554,7 +554,92 @@ class MainActivity : Activity() {
         return false
     }
 
+    private fun handleTimeDateAlarm(question: String): Boolean {
+        val q = question.lowercase(Locale.ROOT)
+
+        fun reply(text: String) {
+            addMessage(text)
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_TIME")
+        }
+
+        if (listOf("अलार्म", "alarm", "जगा देना", "उठा देना").any { q.contains(it) }) {
+            val numberWords = mapOf(
+                "बारह" to 12, "ग्यारह" to 11, "दस" to 10,
+                "नौ" to 9, "आठ" to 8, "सात" to 7,
+                "छह" to 6, "छे" to 6, "पाँच" to 5, "पांच" to 5,
+                "चार" to 4, "तीन" to 3, "दो" to 2, "एक" to 1
+            )
+            val numberPattern = numberWords.keys.joinToString("|")
+            val match = Regex("""(\d{1,2}|$numberPattern)(?::(\d{2}))?""").find(q)
+            if (match == null) {
+                reply("सर, कृपया अलार्म का समय बताइए। जैसे सुबह छह बजे।")
+                return true
+            }
+
+            val hourText = match.groupValues[1]
+            var hour = hourText.toIntOrNull() ?: numberWords[hourText] ?: -1
+            val minute = match.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
+
+            if (hour !in 0..23 || minute !in 0..59) {
+                reply("सर, अलार्म का समय सही नहीं है। कृपया दोबारा बताइए।")
+                return true
+            }
+
+            if (hour <= 12) {
+                when {
+                    q.contains("सुबह") || q.contains("सवेरे") -> {
+                        if (hour == 12) hour = 0
+                    }
+                    q.contains("शाम") || q.contains("रात") ||
+                    q.contains("pm") || q.contains("पीएम") -> {
+                        if (hour in 1..11) hour += 12
+                    }
+                    q.contains("दोपहर") -> {
+                        if (hour in 1..11) hour += 12
+                    }
+                    q.contains("am") || q.contains("एएम") -> {
+                        if (hour == 12) hour = 0
+                    }
+                }
+            }
+
+            return try {
+                val intent = android.content.Intent(
+                    android.provider.AlarmClock.ACTION_SET_ALARM
+                ).putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
+                 .putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute)
+                 .putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, "SHAKTI Alarm")
+                 .putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
+
+                startActivity(intent)
+                reply("जी सर, ${if (hour == 0) 12 else if (hour > 12) hour - 12 else hour} बजकर $minute मिनट का अलार्म सेट करने के लिए Clock ऐप खोल रहा हूँ।")
+                true
+            } catch (e: Exception) {
+                reply("सर, इस फोन में अलार्म ऐप नहीं खुल पाई।")
+                true
+            }
+        }
+
+        if (listOf("कितने बजे", "समय", "टाइम", "time").any { q.contains(it) }) {
+            val now = java.text.SimpleDateFormat("hh:mm a", Locale("hi", "IN"))
+                .format(java.util.Date())
+            reply("सर, अभी समय है $now।")
+            return true
+        }
+
+        if (listOf("तारीख", "आज कौन सा दिन", "आज कौन-सा दिन", "date", "दिन बताओ").any { q.contains(it) }) {
+            val today = java.text.SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("hi", "IN"))
+                .format(java.util.Date())
+            reply("सर, आज $today है।")
+            return true
+        }
+
+        return false
+    }
+
     private fun askGemini(question: String) {
+        if (handleTimeDateAlarm(question)) return
+
         val weatherWords = listOf(
             "मौसम", "बारिश", "वर्षा", "तापमान",
             "weather", "rain", "temperature", "forecast", "humidity"
