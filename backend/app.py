@@ -235,6 +235,111 @@ def chat():
 
 
 
+
+@app.route("/weather", methods=["GET"])
+@limiter.limit("20 per minute")
+def weather():
+    try:
+        latitude = float(request.args.get("latitude", ""))
+        longitude = float(request.args.get("longitude", ""))
+
+        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+            return jsonify({"reply": "लोकेशन सही नहीं है।"}), 400
+
+        api_url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,wind_speed_10m",
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+            "timezone": "auto",
+            "forecast_days": 7
+        }
+
+        response = requests.get(api_url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        current = data.get("current", {})
+        daily = data.get("daily", {})
+
+        descriptions = {
+            0: "साफ आसमान",
+            1: "मुख्यतः साफ",
+            2: "आंशिक बादल",
+            3: "बादल छाए हुए",
+            45: "कोहरा",
+            48: "घना कोहरा",
+            51: "हल्की बूंदाबांदी",
+            53: "बूंदाबांदी",
+            55: "तेज बूंदाबांदी",
+            61: "हल्की बारिश",
+            63: "मध्यम बारिश",
+            65: "तेज बारिश",
+            71: "हल्की बर्फबारी",
+            73: "बर्फबारी",
+            75: "भारी बर्फबारी",
+            80: "हल्की बारिश की बौछार",
+            81: "बारिश की बौछार",
+            82: "तेज बारिश की बौछार",
+            95: "गरज के साथ तूफान",
+            96: "ओलों के साथ तूफान",
+            99: "तेज ओलों वाला तूफान"
+        }
+
+        code = current.get("weather_code")
+        condition = descriptions.get(code, "मौसम की जानकारी उपलब्ध")
+        temperature = current.get("temperature_2m", "उपलब्ध नहीं")
+        feels = current.get("apparent_temperature", "उपलब्ध नहीं")
+        humidity = current.get("relative_humidity_2m", "उपलब्ध नहीं")
+        wind = current.get("wind_speed_10m", "उपलब्ध नहीं")
+        rain = current.get("precipitation", "उपलब्ध नहीं")
+
+        lines = [
+            "सर, आपके वर्तमान स्थान का मौसम यह है।",
+            f"अभी मौसम: {condition}।",
+            f"तापमान {temperature} डिग्री सेल्सियस है।",
+            f"महसूस होने वाला तापमान {feels} डिग्री है।",
+            f"नमी {humidity} प्रतिशत है।",
+            f"हवा की गति {wind} किलोमीटर प्रति घंटा है।",
+            f"वर्तमान वर्षा {rain} मिलीमीटर है।"
+        ]
+
+
+        dates = daily.get("time", [])
+        highs = daily.get("temperature_2m_max", [])
+        lows = daily.get("temperature_2m_min", [])
+        probabilities = daily.get("precipitation_probability_max", [])
+        codes = daily.get("weather_code", [])
+
+        lines.append("अगले सात दिनों का पूर्वानुमान:")
+        for i, date in enumerate(dates[:7]):
+            try:
+                day = datetime.strptime(date, "%Y-%m-%d").strftime("%d %b")
+            except ValueError:
+                day = date
+
+            high = highs[i] if i < len(highs) else "?"
+            low = lows[i] if i < len(lows) else "?"
+            probability = probabilities[i] if i < len(probabilities) else "?"
+            day_condition = descriptions.get(codes[i], "मौसम सामान्य") if i < len(codes) else "मौसम सामान्य"
+
+            lines.append(
+                f"{day}: {day_condition}, न्यूनतम {low} और अधिकतम {high} डिग्री, "
+                f"बारिश की संभावना {probability} प्रतिशत।"
+            )
+
+        return jsonify({"ok": True, "reply": " ".join(lines)})
+
+    except (TypeError, ValueError):
+        return jsonify({"reply": "लोकेशन की जानकारी सही नहीं मिली।"}), 400
+    except requests.RequestException:
+        return jsonify({"reply": "मौसम सर्वर से संपर्क नहीं हो पाया। थोड़ी देर बाद कोशिश करें।"}), 502
+    except Exception:
+        app.logger.exception("Weather service error")
+        return jsonify({"reply": "मौसम की जानकारी प्राप्त करने में समस्या हुई।"}), 500
+
+
 @app.route("/admin/maintenance", methods=["POST"])
 def admin_maintenance():
     import hmac

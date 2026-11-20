@@ -59,6 +59,7 @@ class MainActivity : Activity() {
     private lateinit var input: EditText
     private var tts: TextToSpeech? = null
     private var selectedPhone = ""
+    private var pendingWeatherRequest = false
     private var cameraPhotoUri: Uri? = null
     private var cameraPhotoPath: String? = null
     private var speechRecognizer: SpeechRecognizer? = null
@@ -554,6 +555,15 @@ class MainActivity : Activity() {
     }
 
     private fun askGemini(question: String) {
+        val weatherWords = listOf(
+            "मौसम", "बारिश", "वर्षा", "तापमान",
+            "weather", "rain", "temperature", "forecast", "humidity"
+        )
+        if (weatherWords.any { question.lowercase(Locale.ROOT).contains(it) }) {
+            fetchWeather()
+            return
+        }
+
         if (openAppByVoice(question)) {
             tts?.speak("जी सर, YouTube खोल रहा हूँ।", TextToSpeech.QUEUE_FLUSH, null, "MY_AI_COMMAND")
             return
@@ -606,6 +616,93 @@ class MainActivity : Activity() {
                 addMessage("SHAKTI AI: $reply")
                 tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "MY_AI_REPLY")
             }
+        }
+    }
+
+
+    private fun fetchWeather() {
+        val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        if (fine != PackageManager.PERMISSION_GRANTED &&
+            coarse != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingWeatherRequest = true
+            requestPermissions(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ),
+                LOCATION_CODE
+            )
+            return
+        }
+
+        try {
+            val manager = getSystemService(LOCATION_SERVICE) as LocationManager
+            var bestLocation: android.location.Location? = null
+
+            for (provider in manager.getProviders(true)) {
+                val candidate = manager.getLastKnownLocation(provider)
+                if (candidate != null &&
+                    (bestLocation == null ||
+                     candidate.time > bestLocation.time)
+                ) {
+                    bestLocation = candidate
+                }
+            }
+
+            val location = bestLocation
+            if (location == null) {
+                val message = "सर, अभी फोन की लोकेशन उपलब्ध नहीं है। GPS चालू करके दोबारा पूछिए।"
+                addMessage(message)
+                tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
+                return
+            }
+
+            addMessage("SHAKTI: आपके स्थान का मौसम प्राप्त कर रहा हूँ...")
+
+            thread {
+                var connection: HttpURLConnection? = null
+
+                val reply = try {
+                    val url = Uri.parse(
+                        "https://my-ai-gemini.onrender.com/weather"
+                    ).buildUpon()
+                        .appendQueryParameter("latitude", location.latitude.toString())
+                        .appendQueryParameter("longitude", location.longitude.toString())
+                        .build().toString()
+
+                    connection = URL(url).openConnection() as HttpURLConnection
+                    connection.requestMethod = "GET"
+                    connection.connectTimeout = 15000
+                    connection.readTimeout = 30000
+
+                    val stream = if (connection.responseCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+
+                    val response = stream.bufferedReader().use { it.readText() }
+                    JSONObject(response).optString(
+                        "reply", "सर, मौसम की जानकारी नहीं मिल पाई।"
+                    )
+                } catch (e: Exception) {
+                    "सर, मौसम सर्वर से कनेक्शन नहीं हो पाया। थोड़ी देर बाद कोशिश करें।"
+                } finally {
+                    connection?.disconnect()
+                }
+
+                runOnUiThread {
+                    addMessage("SHAKTI AI: $reply")
+                    tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "SHAKTI_WEATHER")
+                }
+            }
+        } catch (e: SecurityException) {
+            addMessage("सर, लोकेशन की अनुमति नहीं मिली।")
+        } catch (e: Exception) {
+            addMessage("सर, लोकेशन प्राप्त करने में समस्या हुई।")
         }
     }
 
@@ -1188,8 +1285,14 @@ class MainActivity : Activity() {
 
         if (requestCode == LOCATION_CODE) {
             if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
-                getLocation()
+                if (pendingWeatherRequest) {
+                    pendingWeatherRequest = false
+                    fetchWeather()
+                } else {
+                    getLocation()
+                }
             } else {
+                pendingWeatherRequest = false
                 addMessage("Location permission अस्वीकार कर दी गई।")
             }
         } else if (requestCode == WAKE_PERMISSION_CODE) {
