@@ -70,6 +70,11 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val cameraPrefs = getSharedPreferences("shakti_camera", MODE_PRIVATE)
+        cameraPhotoUri = savedInstanceState?.getString("pending_camera_uri")
+            ?.let { Uri.parse(it) }
+            ?: cameraPrefs.getString("pending_camera_uri", null)?.let { Uri.parse(it) }
+
         val wakeFilter = IntentFilter().apply {
             addAction(WakeWordService.ACTION_STATUS)
             addAction(WakeWordService.ACTION_TRANSCRIPT)
@@ -728,6 +733,10 @@ class MainActivity : Activity() {
                 this, "$packageName.fileprovider", photoFile
             )
             cameraPhotoUri = uri
+            getSharedPreferences("shakti_camera", MODE_PRIVATE)
+                .edit()
+                .putString("pending_camera_uri", uri.toString())
+                .commit()
 
             val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
                 putExtra(MediaStore.EXTRA_OUTPUT, uri)
@@ -879,6 +888,13 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        cameraPhotoUri?.let {
+            outState.putString("pending_camera_uri", it.toString())
+        }
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onActivityResult(
         requestCode: Int,
         resultCode: Int,
@@ -887,17 +903,25 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
 
         if (resultCode != RESULT_OK) {
-            if (requestCode == CAMERA_CODE) cameraPhotoUri = null
+            if (requestCode == CAMERA_CODE) {
+                cameraPhotoUri = null
+                getSharedPreferences("shakti_camera", MODE_PRIVATE)
+                    .edit().remove("pending_camera_uri").apply()
+            }
             return
         }
 
         when (requestCode) {
             CAMERA_CODE -> {
                 val uri = cameraPhotoUri
+                    ?: getSharedPreferences("shakti_camera", MODE_PRIVATE)
+                        .getString("pending_camera_uri", null)?.let { Uri.parse(it) }
                 val photo = uri?.let { decodeCameraPhoto(it) }
                     ?: data?.data?.let { decodeCameraPhoto(it) }
                     ?: (data?.extras?.get("data") as? Bitmap)
                 cameraPhotoUri = null
+                getSharedPreferences("shakti_camera", MODE_PRIVATE)
+                    .edit().remove("pending_camera_uri").apply()
 
                 if (photo != null) {
                     val image = ImageView(this).apply {
